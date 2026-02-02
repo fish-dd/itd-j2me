@@ -4,12 +4,13 @@ import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
 import javax.microedition.lcdui.*;
-import javax.microedition.midlet.MIDlet;
+import java.util.Hashtable;
 import java.util.Vector;
 
 public class FeedCanvas extends Canvas {
     private JSONArray posts;
-    Vector strings = new Vector();
+    private Vector strings = new Vector();
+    private Hashtable avatars = new Hashtable();
 
     // Параметры UI
     private int scrollY = 0;         // Смещение прокрутки по вертикали
@@ -24,11 +25,12 @@ public class FeedCanvas extends Canvas {
 
     // Константы для верстки
     private static final int PADDING = 5;
-    private static final int AVATAR_SIZE = 30;
-    private static final int COLOR_BG = 0x101214;      // Белый фон
-    private static final int COLOR_TEXT = 0xE4E6E8;    // Черный текст
-    private static final int COLOR_SEL = 0x242424;     // Серый (выделение)
-    private static final int COLOR_BLUE = 0x0000FF;    // Синий (имя)
+    private static final int AVATAR_SIZE = 32;
+    private static final int COLOR_BG = 0x000000;
+    private static final int COLOR_TEXT = 0xE4E6E8;
+    private static final int COLOR_SEL = 0x242424;
+    private static final int COLOR_BLUE = 0x0000FF;
+    private static final int MIN_POST_HEIGHT = AVATAR_SIZE + PADDING*2;
 
     public FeedCanvas(JSONArray posts) {
         setFullScreenMode(true);
@@ -61,13 +63,14 @@ public class FeedCanvas extends Canvas {
         for (int i = 0; i < posts.size(); i++) {
             JSONObject post = (JSONObject) posts.get(i);
 
-            // Рассчитываем высоту этого поста (упрощенно)
-            // Имя + Текст + Лайки + Отступы
+            // Рассчитываем высоту этого поста
             String[] content = (String[]) strings.elementAt(i);
             int postHeight = PADDING*4 + lineHeight*(content.length + 1);
+            postHeight = Math.max(postHeight, MIN_POST_HEIGHT);
 
             // Оптимизация: Рисуем, только если пост попадает в экран
             if (currentY + postHeight > 0 && currentY < screenHeight) {
+                String emoji = post.getObject("author").getString("avatar");
 
                 // Рисуем фон выделения, если пост выбран курсором
                 if (i == selectedIndex) {
@@ -75,32 +78,50 @@ public class FeedCanvas extends Canvas {
                     g.fillRect(0, currentY, screenWidth, postHeight);
                 }
 
-                // Рисуем "Аватарку" (цветной квадрат)
-                int emojiId = post.getObject("author").getString("avatar").charAt(0);
-                ITD.log(post.getObject("author").getString("avatar"));
-                ITD.log(String.valueOf(post.getObject("author").getString("avatar").length()));
-                String avatarUrl = ITD.URL + "/avatar/" + String.valueOf(emojiId);
-                ITD.getRequest(avatarUrl);
-                g.setColor(0xCCCCCC);
-                g.fillRect(PADDING, currentY + PADDING, AVATAR_SIZE, AVATAR_SIZE);
+                // Рисуем аватарку
+                char[] emojiChar = post.getObject("author").getString("avatar").toCharArray();
+
+                String emojiId = "";
+                for (int j = 0; j < emojiChar.length; j++) {
+                    int charCode = emojiChar[j];
+                    emojiId += Integer.toHexString(charCode);
+                }
+
+                ITD.log(emoji);
+                ITD.log(emojiId);
+
+                Image avatar;
+                if (avatars.containsKey(emojiId)) {
+                    avatar = (Image) avatars.get(emojiId);
+                }
+                else {
+                    String avatarUrl = ITD.URL + "/avatar/" + emojiId;
+                    byte[] avatarRaw = ITD.rawGetRequest(avatarUrl).getBytes();
+
+                    ITD.log(avatarRaw);
+
+                    avatar = Image.createImage(avatarRaw, 0, avatarRaw.length);
+                    avatars.put(emojiId, avatar);
+                }
+
+                g.drawImage(avatar, PADDING, currentY + PADDING, 0);
 
                 // Рисуем Имя автора
                 g.setFont(fontBold);
                 g.setColor(COLOR_TEXT);
-                g.drawString(post.getObject("author").getString("displayName"), PADDING*2 + AVATAR_SIZE, currentY + PADDING, Graphics.TOP | Graphics.LEFT);
+                g.drawString(post.getObject("author").getString("displayName"), PADDING * 2 + AVATAR_SIZE, currentY + PADDING, Graphics.TOP | Graphics.LEFT);
 
                 // Рисуем Текст поста
                 g.setFont(fontPlain);
                 g.setColor(COLOR_TEXT);
-                // В реальном app нужен алгоритм переноса строк! Здесь упрощенно в одну строку.
                 for (int j = 0; j < content.length; j++) {
-                    g.drawString(content[j], PADDING*2 + AVATAR_SIZE, currentY + PADDING + lineHeight*(j+1), Graphics.TOP | Graphics.LEFT);
+                    g.drawString(content[j], PADDING * 2 + AVATAR_SIZE, currentY + PADDING + lineHeight * (j + 1), Graphics.TOP | Graphics.LEFT);
                 }
 
                 // Рисуем Лайки
-                g.setColor(COLOR_TEXT); // Серый цвет для мета-инфо
+                g.setColor(COLOR_TEXT);
                 String likeStr = (post.getBoolean("isLiked") ? "♥ " : "♡ ") + post.getInt("likesCount");
-                g.drawString(likeStr, PADDING*2 + AVATAR_SIZE, currentY + PADDING + lineHeight*(content.length+1), Graphics.TOP | Graphics.LEFT);
+                g.drawString(likeStr, PADDING * 2 + AVATAR_SIZE, currentY + PADDING + lineHeight * (content.length + 1), Graphics.TOP | Graphics.LEFT);
 
                 // Разделительная линия
                 g.setColor(COLOR_SEL);
@@ -123,7 +144,8 @@ public class FeedCanvas extends Canvas {
                 int scrolledHeight = 0;
                 for (int i = 0; i < selectedIndex; i++) {
                     String[] content = (String[]) strings.elementAt(i);
-                    scrolledHeight += PADDING*4 + lineHeight*(content.length + 1);
+                    int postHeight = PADDING*4 + lineHeight*(content.length + 1);
+                    scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
                 }
 
                 // Логика "умного" скролла вверх
@@ -139,7 +161,8 @@ public class FeedCanvas extends Canvas {
                 int scrolledHeight = 0;
                 for (int i = 0; i < selectedIndex+1; i++) {
                     String[] content = (String[]) strings.elementAt(i);
-                    scrolledHeight += PADDING*4 + lineHeight*(content.length + 1);
+                    int postHeight = PADDING*4 + lineHeight*(content.length + 1);
+                    scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
                 }
 
                 // Логика "умного" скролла вниз

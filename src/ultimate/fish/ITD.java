@@ -21,7 +21,7 @@ public class ITD extends MIDlet {
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.99:5000", "http://ultimatefish.ddns.net:5000"};
-    static String URL = URLS[2];
+    static String URL = URLS[0];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -103,6 +103,33 @@ public class ITD extends MIDlet {
 
                 final String response = buffer.toString();
                 log(response);
+                return response;
+            }
+        }
+        catch (Exception e) {
+            throw new RuntimeException(String.valueOf(e));
+        }
+        return null;
+    }
+
+    static String rawGetRequest(String url) {
+        try {
+            HttpConnection connection = (HttpConnection) Connector.open(url);
+            connection.setRequestMethod(HttpConnection.GET);
+
+            int code = connection.getResponseCode();
+            if (code == 200) {
+                InputStream inputStream = connection.openInputStream();
+                InputStreamReader inputReader = new InputStreamReader(inputStream);
+                StringBuffer buffer = new StringBuffer();
+
+                int answerChar;
+                while ((answerChar = inputReader.read()) != -1) {
+                    buffer.append((char) answerChar);
+                }
+
+                final String response = buffer.toString();
+//                log(response);
                 return response;
             }
         }
