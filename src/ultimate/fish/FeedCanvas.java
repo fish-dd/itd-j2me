@@ -4,13 +4,19 @@ import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
 import javax.microedition.lcdui.*;
+import javax.microedition.midlet.MIDlet;
+import java.io.IOException;
 import java.util.Hashtable;
 import java.util.Vector;
 
 public class FeedCanvas extends Canvas {
     private JSONArray posts;
+    private ITD midlet;
     private Vector strings = new Vector();
     private Hashtable avatars = new Hashtable();
+    private Hashtable media = new Hashtable();
+    private Vector avatarsQueue = new Vector();
+    private Thread avatarLoader;
 
     // Параметры UI
     private int scrollY = 0;         // Смещение прокрутки по вертикали
@@ -26,13 +32,24 @@ public class FeedCanvas extends Canvas {
     // Константы для верстки
     private static final int PADDING = 5;
     private static final int AVATAR_SIZE = 32;
+    private static final int ICON_SIZE = 16;
     private static final int COLOR_BG = 0x000000;
     private static final int COLOR_TEXT = 0xE4E6E8;
     private static final int COLOR_SEL = 0x242424;
     private static final int COLOR_BLUE = 0x0000FF;
     private static final int MIN_POST_HEIGHT = AVATAR_SIZE + PADDING*2;
 
-    public FeedCanvas(JSONArray posts) {
+    //иконки
+    //google material symbols, Apache License, Version 2.0
+    //size 16, weight 400, grade -25, optical size 20, #E4E6E8
+    private Image likeIcon;
+    private Image likeFillIcon;
+    private Image commentIcon;
+    private Image viewIcon;
+    private Image repostIcon;
+    private Image verifiedIcon;
+
+    public FeedCanvas(JSONArray posts, ITD midlet) {
         setFullScreenMode(true);
         screenWidth = getWidth();
         screenHeight = getHeight();
@@ -42,17 +59,53 @@ public class FeedCanvas extends Canvas {
         fontPlain = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
         lineHeight = fontPlain.getHeight();
 
+        try {
+            likeIcon = Image.createImage(Class.class.getResourceAsStream("/like.png"));
+            likeFillIcon = Image.createImage(Class.class.getResourceAsStream("/like_fill.png"));
+            commentIcon = Image.createImage(Class.class.getResourceAsStream("/comment.png"));
+            viewIcon = Image.createImage(Class.class.getResourceAsStream("/view.png"));
+            repostIcon = Image.createImage(Class.class.getResourceAsStream("/repost.png"));
+            verifiedIcon = Image.createImage(Class.class.getResourceAsStream("/verified.png"));
+        } catch (IOException e) { throw new RuntimeException(e.toString()); }
+
         this.posts = posts;
+        this.midlet = midlet;
 
         for (int i = 0; i < posts.size(); i++) {
             JSONObject post = (JSONObject) posts.get(i);
             String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*3 - AVATAR_SIZE);
             strings.addElement(content);
         }
+
+        avatarLoader = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    while (avatarsQueue.isEmpty()) {
+                        synchronized (avatarsQueue) {
+                            try {
+                                avatarsQueue.wait(); //пик шизы
+                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
+                        }
+                    }
+
+                    String emojiId = (String) avatarsQueue.elementAt(0);
+                    String avatarUrl = ITD.URL + "/avatar/" + emojiId;
+
+                    byte[] avatarRaw = ITD.rawGetRequest(avatarUrl).getBytes();
+                    Image avatar = Image.createImage(avatarRaw, 0, avatarRaw.length);
+
+                    avatars.put(emojiId, avatar);
+                    avatarsQueue.removeElementAt(0);
+
+                    repaint();
+                }
+            }
+        });
+        avatarLoader.start();
     }
 
     // === ГЛАВНЫЙ МЕТОД ОТРИСОВКИ ===
-    protected void paint(Graphics g) {
+    protected void paint(final Graphics g) {
         // 1. Очистка экрана
         g.setColor(COLOR_BG);
         g.fillRect(0, 0, screenWidth, screenHeight);
@@ -64,9 +117,18 @@ public class FeedCanvas extends Canvas {
             JSONObject post = (JSONObject) posts.get(i);
 
             // Рассчитываем высоту этого поста
+
             String[] content = (String[]) strings.elementAt(i);
-            int postHeight = PADDING*4 + lineHeight*(content.length + 1);
-            postHeight = Math.max(postHeight, MIN_POST_HEIGHT);
+            int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+
+            boolean isLiked = post.getBoolean("isLiked");
+            String displayName = post.getObject("author").getString("displayName");
+            boolean isVerified = post.getObject("author").getBoolean("verified");
+            int likesCount = post.getInt("likesCount");
+            int commentsCount = post.getInt("commentsCount");
+            int viewsCount = post.getInt("viewsCount");
+            int repostsCount = post.getInt("repostsCount");
+            int createdAt = post.getInt("createdAt");
 
             // Оптимизация: Рисуем, только если пост попадает в экран
             if (currentY + postHeight > 0 && currentY < screenHeight) {
@@ -90,38 +152,130 @@ public class FeedCanvas extends Canvas {
                 ITD.log(emoji);
                 ITD.log(emojiId);
 
-                Image avatar;
                 if (avatars.containsKey(emojiId)) {
-                    avatar = (Image) avatars.get(emojiId);
+                    Image avatar = (Image) avatars.get(emojiId);
+                    g.drawImage(avatar, PADDING, currentY + PADDING, 0);
                 }
                 else {
-                    String avatarUrl = ITD.URL + "/avatar/" + emojiId;
-                    byte[] avatarRaw = ITD.rawGetRequest(avatarUrl).getBytes();
-
-                    ITD.log(avatarRaw);
-
-                    avatar = Image.createImage(avatarRaw, 0, avatarRaw.length);
-                    avatars.put(emojiId, avatar);
+                    synchronized (avatarsQueue) {
+                        avatarsQueue.addElement(emojiId);
+                        avatarsQueue.notify();
+                    }
                 }
-
-                g.drawImage(avatar, PADDING, currentY + PADDING, 0);
 
                 // Рисуем Имя автора
                 g.setFont(fontBold);
                 g.setColor(COLOR_TEXT);
-                g.drawString(post.getObject("author").getString("displayName"), PADDING * 2 + AVATAR_SIZE, currentY + PADDING, Graphics.TOP | Graphics.LEFT);
+                int user_dataY = currentY + PADDING;
+                g.drawString(
+                        displayName,
+                        PADDING * 2 + AVATAR_SIZE,
+                        user_dataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                int nameWidth = strWidth(displayName, fontPlain);
+
+                //галочка
+                if (isVerified) {
+                    int verifiedX = Math.min(PADDING * 3 + AVATAR_SIZE + nameWidth, screenWidth - ICON_SIZE - PADDING);
+                    g.drawImage(
+                            verifiedIcon,
+                            verifiedX,
+                            user_dataY,
+                            Graphics.TOP | Graphics.LEFT
+                    );
+                }
+
+                //время публикации
+                g.setFont(fontBold);
+                g.setColor(COLOR_TEXT);
+                g.drawString(
+                        String.valueOf(createdAt) + " секунд назад",
+                        PADDING * 2 + AVATAR_SIZE,
+                        currentY + PADDING*2 + lineHeight - 2,
+                        Graphics.TOP | Graphics.LEFT
+                );
 
                 // Рисуем Текст поста
                 g.setFont(fontPlain);
                 g.setColor(COLOR_TEXT);
                 for (int j = 0; j < content.length; j++) {
-                    g.drawString(content[j], PADDING * 2 + AVATAR_SIZE, currentY + PADDING + lineHeight * (j + 1), Graphics.TOP | Graphics.LEFT);
+                    g.drawString(
+                            content[j],
+                            PADDING,
+                            currentY + PADDING*2 + AVATAR_SIZE + lineHeight*j,
+                            Graphics.TOP | Graphics.LEFT
+                    );
                 }
 
+                int metadataY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight * content.length;
                 // Рисуем Лайки
                 g.setColor(COLOR_TEXT);
-                String likeStr = (post.getBoolean("isLiked") ? "♥ " : "♡ ") + post.getInt("likesCount");
-                g.drawString(likeStr, PADDING * 2 + AVATAR_SIZE, currentY + PADDING + lineHeight * (content.length + 1), Graphics.TOP | Graphics.LEFT);
+                g.drawImage(
+                        isLiked ? likeFillIcon : likeIcon,
+                        PADDING,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                String likesStr = String.valueOf(likesCount);
+                g.drawString(
+                        likesStr,
+                        ICON_SIZE + PADDING*2,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                int likesWidth = ICON_SIZE + PADDING + strWidth(likesStr, fontPlain);
+
+                //комменты
+                g.setColor(COLOR_TEXT);
+                g.drawImage(
+                        commentIcon,
+                        PADDING*3 + likesWidth,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                String commentStr = String.valueOf(commentsCount);
+                g.drawString(
+                        commentStr,
+                        ICON_SIZE + PADDING*4 + likesWidth,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                int commentsWidth = ICON_SIZE + PADDING + strWidth(commentStr, fontPlain);
+
+                //репосты
+                g.setColor(COLOR_TEXT);
+                g.drawImage(
+                        repostIcon,
+                        PADDING*5 + likesWidth + commentsWidth,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                String repostStr = String.valueOf(repostsCount);
+                g.drawString(
+                        repostStr,
+                        ICON_SIZE + PADDING*6 + likesWidth + commentsWidth,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+//                int repostWidth = ICON_SIZE + PADDING + strWidth(repostStr, fontPlain);
+
+                //просмотры
+                g.setColor(COLOR_TEXT);
+                String viewStr = String.valueOf(viewsCount);
+                int viewOffset = screenWidth - PADDING*2 - ICON_SIZE - strWidth(viewStr, fontPlain);
+                g.drawImage(
+                        viewIcon,
+                        viewOffset,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
+                g.drawString(
+                        viewStr,
+                        viewOffset + ICON_SIZE + PADDING,
+                        metadataY,
+                        Graphics.TOP | Graphics.LEFT
+                );
 
                 // Разделительная линия
                 g.setColor(COLOR_SEL);
@@ -144,7 +298,7 @@ public class FeedCanvas extends Canvas {
                 int scrolledHeight = 0;
                 for (int i = 0; i < selectedIndex; i++) {
                     String[] content = (String[]) strings.elementAt(i);
-                    int postHeight = PADDING*4 + lineHeight*(content.length + 1);
+                    int postHeight = PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1);
                     scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
                 }
 
@@ -161,7 +315,7 @@ public class FeedCanvas extends Canvas {
                 int scrolledHeight = 0;
                 for (int i = 0; i < selectedIndex+1; i++) {
                     String[] content = (String[]) strings.elementAt(i);
-                    int postHeight = PADDING*4 + lineHeight*(content.length + 1);
+                    int postHeight = PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1);
                     scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
                 }
 
@@ -171,12 +325,24 @@ public class FeedCanvas extends Canvas {
                 }
             }
         }
-//        else if (action == FIRE) {
-//            // Нажатие центральной кнопки (ОК) - Лайк
-//            Post p = (Post) posts.elementAt(selectedIndex);
-//            p.isLiked = !p.isLiked;
-//            if (p.isLiked) p.likes++; else p.likes--;
-//        }
+        else if (action == FIRE) {
+            // Нажатие центральной кнопки (ОК) - Лайк
+            JSONObject post = (JSONObject) posts.get(selectedIndex);
+            boolean isLiked = post.getBoolean("isLiked");
+            isLiked = !isLiked;
+
+            String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
+            if (isLiked) {
+                ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+            }
+            else {
+                ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+            }
+
+            post.put("isLiked", isLiked);
+            posts.remove(selectedIndex);
+            posts.put(selectedIndex, post);
+        }
 
         // Обязательно вызываем перерисовку после изменений!
         repaint();
@@ -240,5 +406,9 @@ public class FeedCanvas extends Canvas {
         String[] result = new String[lines.size()];
         lines.copyInto(result);
         return result;
+    }
+
+    static int strWidth(String str, Font font) {
+        return font.charsWidth(str.toCharArray(), 0, str.length());
     }
 }

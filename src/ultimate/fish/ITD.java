@@ -31,7 +31,7 @@ public class ITD extends MIDlet {
     private FeedCanvas feedForm;
 
     private Thread connectThread;
-    public String refreshToken;
+    private String refreshToken;
 
     private final String RECORD_STORE_NAME = "itd-db";
     private final int REFRESH_TOKEN_RECORD_ID = 1;
@@ -48,8 +48,14 @@ public class ITD extends MIDlet {
         } catch (RecordStoreException e) { throw new RuntimeException(e.toString()); }
 
         try {
-            initTokenForm();
-        } catch (RecordStoreNotOpenException e) { throw new RuntimeException(e.toString()); }
+            if (recorder.getNumRecords() >= 1) {
+                this.refreshToken = new String(recorder.getRecord(REFRESH_TOKEN_RECORD_ID), "UTF-8");
+                initFeedForm();
+            }
+            else {
+                initTokenForm();
+            }
+        } catch (Exception e) { throw new RuntimeException(e.toString()); }
     }
 
     protected void pauseApp() {}
@@ -91,7 +97,7 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             log(new Integer(code));
-            if (code == 200) {
+            if (code == 200) { // Код может быть не только 200, а 204 например
                 InputStream inputStream = connection.openInputStream();
                 InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
                 StringBuffer buffer = new StringBuffer();
@@ -144,7 +150,7 @@ public class ITD extends MIDlet {
         try {
             HttpConnection connection = (HttpConnection) Connector.open(url);
             connection.setRequestMethod(HttpConnection.POST);
-            connection.setRequestProperty("Cookie", "csrftoken=" + refreshToken);
+            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
 
             OutputStream outputStream = connection.openOutputStream();
 
@@ -152,7 +158,32 @@ public class ITD extends MIDlet {
             outputStream.flush();
 
             int code = connection.getResponseCode();
-            if (code == 200) {
+            if (code / 100 == 2) {
+                response = connection.getResponseMessage();
+                System.out.println(response);
+            }
+        }
+        catch (Exception e) {
+            throw new RuntimeException(String.valueOf(e));
+        }
+
+        return response;
+    }
+
+    static String deleteRequest(String url, byte[] data, String refreshToken) {
+        String response = "";
+        try {
+            HttpConnection connection = (HttpConnection) Connector.open(url);
+            connection.setRequestMethod(HttpConnection.DELETE);
+            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+
+            OutputStream outputStream = connection.openOutputStream();
+
+            outputStream.write(data);
+            outputStream.flush();
+
+            int code = connection.getResponseCode();
+            if (code / 100 == 2) {
                 response = connection.getResponseMessage();
                 System.out.println(response);
             }
@@ -170,17 +201,7 @@ public class ITD extends MIDlet {
         System.out.println(object);
     }
 
-    private void initTokenForm() throws RecordStoreNotOpenException {
-        if (recorder.getNumRecords() >= 1) {
-            try {
-                this.refreshToken = new String(recorder.getRecord(REFRESH_TOKEN_RECORD_ID), "UTF-8");
-            } catch (Exception e) { throw new RuntimeException(e.toString()); }
-
-            initFeedForm();
-            display.setCurrent(feedForm);
-            return;
-        }
-
+    private void initTokenForm() {
         this.tokenForm = new Form("Вход");
 
         tokenForm.append("Введите refresh-токен");
@@ -211,7 +232,7 @@ public class ITD extends MIDlet {
 
     private void initFeedForm() {
         final String url = API_URL + "/posts?limit=20&tab=popular";
-        final MIDlet app = this;
+        final ITD midlet = this;
 
         Runnable getPostsRunnable = new Runnable() {
             public void run() {
@@ -222,11 +243,15 @@ public class ITD extends MIDlet {
 //                    JSONObject post = (JSONObject) posts.get(i);
 //                    feedForm.append(post.getString("content") + "\n----------\n");
 //                }
-                feedForm = new FeedCanvas(posts);
+                feedForm = new FeedCanvas(posts, midlet);
                 display.setCurrent(feedForm);
             }
         };
         connectThread = new Thread(getPostsRunnable);
         connectThread.start();
+    }
+
+    public String getRefreshToken() {
+        return this.refreshToken;
     }
 }
