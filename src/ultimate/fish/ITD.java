@@ -118,7 +118,7 @@ public class ITD extends MIDlet {
         return null;
     }
 
-    static String rawGetRequest(String url) {
+    static InputStream rawGetRequest(String url) {
         try {
             HttpConnection connection = (HttpConnection) Connector.open(url);
             connection.setRequestMethod(HttpConnection.GET);
@@ -126,17 +126,7 @@ public class ITD extends MIDlet {
             int code = connection.getResponseCode();
             if (code == 200) {
                 InputStream inputStream = connection.openInputStream();
-                InputStreamReader inputReader = new InputStreamReader(inputStream);
-                StringBuffer buffer = new StringBuffer();
-
-                int answerChar;
-                while ((answerChar = inputReader.read()) != -1) {
-                    buffer.append((char) answerChar);
-                }
-
-                final String response = buffer.toString();
-//                log(response);
-                return response;
+                return inputStream;
             }
         }
         catch (Exception e) {
@@ -253,5 +243,13 @@ public class ITD extends MIDlet {
 
     public String getRefreshToken() {
         return this.refreshToken;
+    }
+
+    public static int sum(Integer[] numArray, int start, int end) {
+        int numSum = 0;
+        for (int i = start; i < end; i++) {
+            numSum = numSum + numArray[i].intValue();
+        }
+        return numSum;
     }
 }

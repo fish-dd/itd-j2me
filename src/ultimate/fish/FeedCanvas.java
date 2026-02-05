@@ -6,6 +6,7 @@ import cc.nnproject.json.JSONObject;
 import javax.microedition.lcdui.*;
 import javax.microedition.midlet.MIDlet;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Hashtable;
 import java.util.Vector;
 
@@ -13,10 +14,15 @@ public class FeedCanvas extends Canvas {
     private JSONArray posts;
     private ITD midlet;
     private Vector strings = new Vector();
+    private Vector postsHeights = new Vector(); //высоты постов
+    private Vector mediaHeights = new Vector(); //высоты отдельных медиа
+//    private Vector postsMediaHeights = new Vector(); //высоты блоков медиа
     private Hashtable avatars = new Hashtable();
     private Hashtable media = new Hashtable();
     private Vector avatarsQueue = new Vector();
+    private Vector mediaQueue = new Vector();
     private Thread avatarLoader;
+    private Thread mediaLoader;
 
     // Параметры UI
     private int scrollY = 0;         // Смещение прокрутки по вертикали
@@ -38,6 +44,9 @@ public class FeedCanvas extends Canvas {
     private static final int COLOR_SEL = 0x242424;
     private static final int COLOR_BLUE = 0x0000FF;
     private static final int MIN_POST_HEIGHT = AVATAR_SIZE + PADDING*2;
+    private static final float MAX_MEDIA_RATIO = 3f;
+
+    private final int mediaWidth;
 
     //иконки
     //google material symbols, Apache License, Version 2.0
@@ -53,6 +62,7 @@ public class FeedCanvas extends Canvas {
         setFullScreenMode(true);
         screenWidth = getWidth();
         screenHeight = getHeight();
+        mediaWidth = screenWidth - PADDING*2;
 
         // Инициализация шрифтов
         fontBold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
@@ -73,8 +83,37 @@ public class FeedCanvas extends Canvas {
 
         for (int i = 0; i < posts.size(); i++) {
             JSONObject post = (JSONObject) posts.get(i);
+            JSONArray attachments = post.getArray("attachments");
             String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*3 - AVATAR_SIZE);
             strings.addElement(content);
+
+            int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+
+            int postMediaHeight = 0;
+            Vector postMediaHeightsVector = new Vector();
+            if (!attachments.isEmpty()) {
+                for (int j = 0; j < attachments.size(); j++) {
+                    JSONObject attachmentInfo = attachments.getObject(j);
+
+                    int width = attachmentInfo.getInt("width");
+                    int height = attachmentInfo.getInt("height");
+
+                    float ratio = Math.max(Math.min((float) height / (float) width, MAX_MEDIA_RATIO), 1f / MAX_MEDIA_RATIO);
+                    int mediaHeight = (int) Math.ceil(mediaWidth * ratio);
+
+                    postMediaHeightsVector.addElement(new Integer(mediaHeight));
+                    postMediaHeight += mediaHeight + PADDING;
+                }
+            }
+            postHeight += postMediaHeight;
+
+//            postsMediaHeights.addElement(new Integer(postMediaHeight));
+
+            Integer[] postMediaHeights = new Integer[postMediaHeightsVector.size()];
+            postMediaHeightsVector.copyInto(postMediaHeights);
+            mediaHeights.addElement(postMediaHeights);
+
+            postsHeights.addElement(new Integer (postHeight));
         }
 
         avatarLoader = new Thread(new Runnable() {
@@ -91,8 +130,11 @@ public class FeedCanvas extends Canvas {
                     String emojiId = (String) avatarsQueue.elementAt(0);
                     String avatarUrl = ITD.URL + "/avatar/" + emojiId;
 
-                    byte[] avatarRaw = ITD.rawGetRequest(avatarUrl).getBytes();
-                    Image avatar = Image.createImage(avatarRaw, 0, avatarRaw.length);
+                    InputStream avatarRaw = ITD.rawGetRequest(avatarUrl);
+                    Image avatar = Image.createImage(AVATAR_SIZE, AVATAR_SIZE);
+                    try {
+                        avatar = Image.createImage(avatarRaw);
+                    } catch (IOException e) { ITD.log("Ошибка создания аватара " + e); }
 
                     avatars.put(emojiId, avatar);
                     avatarsQueue.removeElementAt(0);
@@ -101,7 +143,36 @@ public class FeedCanvas extends Canvas {
                 }
             }
         });
+        mediaLoader = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    while (mediaQueue.isEmpty()) {
+                        synchronized (mediaQueue) {
+                            try {
+                                mediaQueue.wait(); //пик шизы
+                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
+                        }
+                    }
+
+                    String fileName = (String) mediaQueue.elementAt(0);
+                    int attachWidth = screenWidth - PADDING*2;
+                    String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + attachWidth;
+
+                    InputStream avatarRaw = ITD.rawGetRequest(mediaUrl);
+                    Image attachment = Image.createImage(AVATAR_SIZE, AVATAR_SIZE);
+                    try {
+                        attachment = Image.createImage(avatarRaw);
+                    } catch (IOException e) { ITD.log("Ошибка создания аватара " + e); }
+
+                    media.put(fileName, attachment);
+                    mediaQueue.removeElementAt(0);
+
+                    repaint();
+                }
+            }
+        });
         avatarLoader.start();
+        mediaLoader.start();
     }
 
     // === ГЛАВНЫЙ МЕТОД ОТРИСОВКИ ===
@@ -117,9 +188,25 @@ public class FeedCanvas extends Canvas {
             JSONObject post = (JSONObject) posts.get(i);
 
             // Рассчитываем высоту этого поста
-
+            int postHeight = ((Integer) postsHeights.elementAt(i)).intValue();
             String[] content = (String[]) strings.elementAt(i);
-            int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+//            int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+//
+//            JSONArray attachments = post.getArray("attachments");
+//            if (!attachments.isEmpty()) {
+//                for (int j = 0; j < attachments.size(); j++) {
+//                    JSONObject attachmentInfo = attachments.getObject(j);
+//
+//                    int width = attachmentInfo.getInt("width");
+//                    int height = attachmentInfo.getInt("height");
+//
+//                    float ratio = Math.max(Math.min((float) height / (float) width, MAX_MEDIA_RATIO), 1f / MAX_MEDIA_RATIO);
+//                    int mediaHeight = (int) Math.ceil(mediaWidth * ratio);
+//
+//                    postHeight += mediaHeight;
+//                }
+//                postHeight += PADDING * (attachments.size() - 1);
+//            }
 
             boolean isLiked = post.getBoolean("isLiked");
             String displayName = post.getObject("author").getString("displayName");
@@ -208,7 +295,51 @@ public class FeedCanvas extends Canvas {
                     );
                 }
 
-                int metadataY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight * content.length;
+                //прикреплённые медиа
+                JSONArray attachments = post.getArray("attachments");
+                if (!attachments.isEmpty()) {
+                    for (int j = 0; j < attachments.size(); j++) {
+                        JSONObject attachmentInfo = attachments.getObject(j);
+
+                        String url = attachmentInfo.getString("url");
+                        String fileName = url.substring(url.lastIndexOf('/') + 1);
+                        ITD.log(fileName);
+
+                        if (media.containsKey(fileName)) {
+                            Image attach = (Image) media.get(fileName);
+                            Integer[] postMediaHeights = (Integer[]) mediaHeights.elementAt(i);
+                            int mediaHeight = postMediaHeights[j].intValue();
+
+                            if (attach.getHeight() != mediaHeight) {
+                                ITD.log("НЕСОСТЫКОВКА " + attach.getHeight() + " " + mediaHeight);
+                                postMediaHeights[j] = new Integer(attach.getHeight());
+                                mediaHeights.setElementAt(postMediaHeights, i);
+
+                                Integer newPostHeight = new Integer(postHeight + (attach.getHeight() - mediaHeight));
+                                postsHeights.setElementAt(newPostHeight, i);
+
+                                repaint();
+                                return;
+                            }
+
+                            g.drawImage(
+                                    attach,
+                                    PADDING,
+                                    currentY + PADDING*(3+j) + AVATAR_SIZE + lineHeight*content.length + ITD.sum(postMediaHeights, 0, j),
+                                    0
+                            );
+                        }
+                        else {
+                            synchronized (mediaQueue) {
+                                mediaQueue.addElement(fileName);
+                                mediaQueue.notify();
+                            }
+                        }
+                    }
+                }
+
+//                int metadataY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight * content.length;
+                int metadataY = currentY + postHeight - PADDING - ICON_SIZE;
                 // Рисуем Лайки
                 g.setColor(COLOR_TEXT);
                 g.drawImage(
@@ -293,29 +424,35 @@ public class FeedCanvas extends Canvas {
 
         if (action == UP) {
             if (selectedIndex > 0) {
-                selectedIndex--;
+                int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
 
-                int scrolledHeight = 0;
-                for (int i = 0; i < selectedIndex; i++) {
-                    String[] content = (String[]) strings.elementAt(i);
-                    int postHeight = PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1);
-                    scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
+                if (selectedPostHeight > screenHeight) {
+                    scrollY -= 50;
                 }
+                else {
+                    selectedIndex--;
 
-                // Логика "умного" скролла вверх
-                if (scrolledHeight < scrollY) {
-                    scrollY = scrolledHeight;
+                    int scrolledHeight = 0;
+                    for (int i = 0; i < selectedIndex; i++) {
+                        int postHeight = ((Integer) postsHeights.elementAt(i)).intValue();
+                        scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
+                    }
+
+                    // Логика "умного" скролла вверх
+                    if (scrolledHeight < scrollY) {
+                        scrollY = scrolledHeight;
+                    }
                 }
             }
         }
         else if (action == DOWN) {
+            int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
             if (selectedIndex < posts.size() - 1) {
                 selectedIndex++;
 
                 int scrolledHeight = 0;
                 for (int i = 0; i < selectedIndex+1; i++) {
-                    String[] content = (String[]) strings.elementAt(i);
-                    int postHeight = PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1);
+                    int postHeight = ((Integer) postsHeights.elementAt(i)).intValue();
                     scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
                 }
 
