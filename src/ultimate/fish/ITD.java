@@ -9,7 +9,6 @@ import javax.microedition.lcdui.*;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.rms.RecordStore;
 import javax.microedition.rms.RecordStoreException;
-import javax.microedition.rms.RecordStoreNotOpenException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
