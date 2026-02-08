@@ -36,6 +36,7 @@ public class ITD extends MIDlet {
     private final int REFRESH_TOKEN_RECORD_ID = 1;
     private RecordStore recorder;
 
+
     protected void startApp() {
         if (isAlreadyRunning) return;
         isAlreadyRunning = true;
@@ -57,9 +58,12 @@ public class ITD extends MIDlet {
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
     }
 
+
     protected void pauseApp() {}
 
+
     protected void destroyApp(boolean unconditional) {}
+
 
     static String getRequest(String url) {
         try {
@@ -87,6 +91,7 @@ public class ITD extends MIDlet {
         }
         return null;
     }
+
 
     static String getRequest(String url, String refreshToken) {
         try {
@@ -117,6 +122,7 @@ public class ITD extends MIDlet {
         return null;
     }
 
+
     static InputStream rawGetRequest(String url) {
         try {
             HttpConnection connection = (HttpConnection) Connector.open(url);
@@ -133,6 +139,7 @@ public class ITD extends MIDlet {
         }
         return null;
     }
+
 
     static String postRequest(String url, byte[] data, String refreshToken) {
         String response = "";
@@ -159,6 +166,7 @@ public class ITD extends MIDlet {
         return response;
     }
 
+
     static String deleteRequest(String url, byte[] data, String refreshToken) {
         String response = "";
         try {
@@ -184,11 +192,13 @@ public class ITD extends MIDlet {
         return response;
     }
 
+
     static void log(Object object) {
         if (!ITD.DEBUG) return;
 
         System.out.println(object);
     }
+
 
     private void initTokenForm() {
         this.tokenForm = new Form("Вход");
@@ -219,6 +229,7 @@ public class ITD extends MIDlet {
         display.setCurrent(tokenForm);
     }
 
+
     private void initFeedForm() {
         final String url = API_URL + "/posts?limit=20&tab=popular";
         final ITD midlet = this;
@@ -240,9 +251,11 @@ public class ITD extends MIDlet {
         connectThread.start();
     }
 
+
     public String getRefreshToken() {
         return this.refreshToken;
     }
+
 
     public static int sum(Integer[] numArray, int start, int end) {
         int numSum = 0;
@@ -250,5 +263,14 @@ public class ITD extends MIDlet {
             numSum = numSum + numArray[i].intValue();
         }
         return numSum;
+    }
+
+
+    public static String getFileName(String url) {
+        return url.substring(url.lastIndexOf('/') + 1);
+    }
+
+    public static int toInt(Object num) {
+        return ((Integer) num).intValue();
     }
 }
