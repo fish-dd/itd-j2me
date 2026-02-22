@@ -53,6 +53,8 @@ public class FeedCanvas extends Canvas {
     private static final int MIN_POST_HEIGHT = AVATAR_SIZE + PADDING*2;
     private static final float MAX_MEDIA_RATIO = 3f;
 
+    private static final int SCROLL_HEIGHT = 100;
+
     private final int mediaWidth;
 
     //иконки
@@ -146,6 +148,7 @@ public class FeedCanvas extends Canvas {
 //            Integer[] postMediaHeights = new Integer[postMediaHeightsVector.size()];
 //            postMediaHeightsVector.copyInto(postMediaHeights);
 
+            ITD.log(postHeight);
             postsHeights.addElement(new Integer (postHeight));
         }
 
@@ -193,11 +196,11 @@ public class FeedCanvas extends Canvas {
                     int mediaWidth = screenWidth - PADDING*2 - offset*2;
                     String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
 
-                    InputStream avatarRaw = ITD.rawGetRequest(mediaUrl);
-                    Image media = Image.createImage(AVATAR_SIZE, AVATAR_SIZE);
+                    InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
+                    Image media = Image.createImage(mediaWidth, 100);
                     try {
-                        media = Image.createImage(avatarRaw);
-                    } catch (IOException e) { ITD.log("Ошибка создания аватара " + e); }
+                        media = Image.createImage(mediaRaw);
+                    } catch (IOException e) { ITD.log("Ошибка создания медиа " + e); }
 
                     int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
                     if (media.getHeight() != mediaHeight) {
@@ -366,43 +369,118 @@ public class FeedCanvas extends Canvas {
     protected void keyPressed(int keyCode) {
         int action = getGameAction(keyCode);
 
+        int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
+
+        int scrolledHeight = 0;
+        for (int postIndex = 0; postIndex < selectedIndex; postIndex++) {
+            int postHeight = ((Integer) postsHeights.elementAt(postIndex)).intValue();
+            scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
+        }
+
         if (action == UP) {
             if (selectedIndex > 0) {
-                int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
+                int prevPostHeight = ((Integer) postsHeights.elementAt(selectedIndex - 1)).intValue();
 
+                // Логика "умного" скролла вверх
+//                if (scrolledHeight < scrollY) {
                 if (selectedPostHeight > screenHeight) {
-                    scrollY -= 50;
+                    if (scrollY == scrolledHeight) {
+                        if (prevPostHeight > screenHeight) {
+                            selectedIndex--;
+                            scrollY = scrolledHeight - screenHeight;
+                            ITD.log("scroll up state 1");
+                        }
+                        else {
+                            selectedIndex--;
+                            scrollY = scrolledHeight - prevPostHeight;
+                            ITD.log("scroll up state 2");
+                        }
+                    }
+                    else if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
+                        scrollY = scrolledHeight;
+                        ITD.log("scroll up state 3");
+                    }
+                    else {
+                        scrollY = scrollY - SCROLL_HEIGHT;
+                        ITD.log("scroll up state 4");
+                    }
                 }
                 else {
-                    selectedIndex--;
-
-                    int scrolledHeight = 0;
-                    for (int postIndex = 0; postIndex < selectedIndex; postIndex++) {
-                        int postHeight = ((Integer) postsHeights.elementAt(postIndex)).intValue();
-                        scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
+                    if (prevPostHeight > screenHeight) {
+                        selectedIndex--;
+                        scrollY = scrolledHeight - screenHeight;
+                        ITD.log("scroll up state 5");
                     }
-
-                    // Логика "умного" скролла вверх
-                    if (scrolledHeight < scrollY) {
-                        scrollY = scrolledHeight;
+                    else {
+                        selectedIndex--;
+                        scrollY = Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedPostHeight - screenHeight);
+                        ITD.log("scroll up state 6");
                     }
+                }
+                ITD.log(selectedPostHeight);
+            }
+            else if (selectedPostHeight > screenHeight) {
+                if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
+                    scrollY = scrolledHeight;
+                    ITD.log("scroll up state 3");
+                }
+                else {
+                    scrollY = scrollY - SCROLL_HEIGHT;
+                    ITD.log("scroll up state 4");
                 }
             }
         }
         else if (action == DOWN) {
-            int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
             if (selectedIndex < posts.size() - 1) {
-                selectedIndex++;
-
-                int scrolledHeight = 0;
-                for (int postIndex = 0; postIndex < selectedIndex+1; postIndex++) {
-                    int postHeight = ((Integer) postsHeights.elementAt(postIndex)).intValue();
-                    scrolledHeight += Math.max(postHeight, MIN_POST_HEIGHT);
-                }
+                int nextPostHeight = ((Integer) postsHeights.elementAt(selectedIndex + 1)).intValue();
 
                 // Логика "умного" скролла вниз
-                if (scrolledHeight > scrollY + screenHeight) {
-                    scrollY = scrolledHeight - screenHeight;
+//                if (scrolledHeight + selectedPostHeight + nextPostHeight > scrollY + screenHeight) {
+                if (selectedPostHeight > screenHeight) {
+                    if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) {
+                        if (nextPostHeight > screenHeight) {
+                            selectedIndex++;
+                            scrollY = scrolledHeight + selectedPostHeight;
+                            ITD.log("scroll down state 1");
+                        }
+                        else {
+                            selectedIndex++;
+                            scrollY = scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight;
+                            ITD.log("scroll down state 2");
+                        }
+                    }
+                    else if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) {
+                        scrollY = scrolledHeight + selectedPostHeight - screenHeight;
+                        ITD.log("scroll down state 3");
+                    }
+                    else {
+                        scrollY = scrollY + SCROLL_HEIGHT;
+                        ITD.log("scroll down state 4");
+                    }
+                }
+                else {
+                    if (nextPostHeight > screenHeight) {
+                        selectedIndex++;
+                        scrollY = scrolledHeight + selectedPostHeight;
+                        ITD.log("scroll down state 5");
+                    }
+                    else {
+                        selectedIndex++;
+                        scrollY = Math.max(scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight, 0);
+                        ITD.log("scroll down state 6");
+                    }
+                }
+                ITD.log(selectedPostHeight);
+//                }
+            }
+            else if (selectedPostHeight > screenHeight) {
+                if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) {
+                    scrollY = scrolledHeight + selectedPostHeight - screenHeight;
+                    ITD.log("scroll down state 3");
+                }
+                else {
+                    scrollY = scrollY + SCROLL_HEIGHT;
+                    ITD.log("scroll down state 4");
                 }
             }
         }
@@ -426,6 +504,7 @@ public class FeedCanvas extends Canvas {
         }
 
         // Обязательно вызываем перерисовку после изменений!
+        System.out.println(scrollY);
         repaint();
     }
 
@@ -508,7 +587,7 @@ public class FeedCanvas extends Canvas {
             emojiId += Integer.toHexString(charCode);
         }
 
-        ITD.log(emoji + " " + emojiId);
+//        ITD.log(emoji + " " + emojiId);
 
         if (avatars.containsKey(emojiId)) {
             Image avatar = (Image) avatars.get(emojiId);
@@ -577,7 +656,7 @@ public class FeedCanvas extends Canvas {
 
                 String url = mediaInfo.getString("url");
                 String fileName = ITD.getFileName(url);
-                ITD.log(fileName);
+//                ITD.log(fileName);
 
                 if (medias.containsKey(fileName)) {
                     Image media = (Image) medias.get(fileName);

@@ -199,6 +199,12 @@ public class ITD extends MIDlet {
         System.out.println(object);
     }
 
+    static void log(int integer) {
+        if (!ITD.DEBUG) return;
+
+        System.out.println(integer);
+    }
+
 
     private void initTokenForm() {
         this.tokenForm = new Form("Вход");
@@ -231,7 +237,7 @@ public class ITD extends MIDlet {
 
 
     private void initFeedForm() {
-        final String url = API_URL + "/posts?limit=20&tab=popular";
+        final String url = API_URL + "/posts?limit=5&tab=popular";
         final ITD midlet = this;
 
         Runnable getPostsRunnable = new Runnable() {
