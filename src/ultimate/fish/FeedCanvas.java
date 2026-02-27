@@ -34,13 +34,13 @@ public class FeedCanvas extends Canvas {
     // Параметры UI
     private int scrollY = 0;         // Смещение прокрутки по вертикали
     private int selectedIndex = 0;   // Индекс выбранного поста
-    private final int screenWidth;
-    private final int screenHeight;
+    private int screenWidth;
+    private int screenHeight;
 
     // Шрифты
-    private final Font fontBold;
-    private final Font fontPlain;
-    private final int lineHeight;
+    private Font fontBold;
+    private Font fontPlain;
+    private int lineHeight;
 
     // Константы для верстки
     private static final int PADDING = 5;
@@ -55,7 +55,8 @@ public class FeedCanvas extends Canvas {
 
     private static final int SCROLL_HEIGHT = 100;
 
-    private final int mediaWidth;
+    private int mediaWidth;
+    private int repostMediaWidth;
 
     //иконки
     //google material symbols, Apache License, Version 2.0
@@ -69,89 +70,184 @@ public class FeedCanvas extends Canvas {
 
 
     public FeedCanvas(JSONArray posts, ITD midlet) {
-        setFullScreenMode(true);
-        screenWidth = getWidth();
-        screenHeight = getHeight();
-        mediaWidth = screenWidth - PADDING*2;
-
-        // Инициализация шрифтов
-        fontBold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
-        fontPlain = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
-        lineHeight = fontPlain.getHeight();
-
-        try {
-            likeIcon = Image.createImage(Class.class.getResourceAsStream("/like.png"));
-            likeFillIcon = Image.createImage(Class.class.getResourceAsStream("/like_fill.png"));
-            commentIcon = Image.createImage(Class.class.getResourceAsStream("/comment.png"));
-            viewIcon = Image.createImage(Class.class.getResourceAsStream("/view.png"));
-            repostIcon = Image.createImage(Class.class.getResourceAsStream("/repost.png"));
-            verifiedIcon = Image.createImage(Class.class.getResourceAsStream("/verified.png"));
-        } catch (Exception e) { throw new RuntimeException(e.toString()); }
-
         this.posts = posts;
         this.midlet = midlet;
 
+        setFullScreenMode(true);
+        setScreenSize();
+        initFonts();
+        initIcons();
+
+        calcHeights(posts);
+
+        initAvatarLoader();
+        initMediaLoader();
+
+        setCommandListener(midlet.feedCmdListener);
+        addCommand(midlet.backToMenuCmd);
+
+        ITD.log("фид стартовал");
+    }
+
+
+    private void setScreenSize() {
+        screenWidth = getWidth();
+        screenHeight = getHeight();
+        mediaWidth = screenWidth - PADDING*2;
+        repostMediaWidth = mediaWidth - PADDING*2 - 2;
+    }
+
+
+    private void initFonts() {
+        fontBold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
+        fontPlain = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
+        lineHeight = fontPlain.getHeight();
+    }
+
+
+    private void initIcons() {
+        try {
+            likeIcon = ITD.getIconRes("like");
+            likeFillIcon = ITD.getIconRes("like_fill");
+            commentIcon = ITD.getIconRes("comment");
+            viewIcon = ITD.getIconRes("view");
+            repostIcon = ITD.getIconRes("repost");
+            verifiedIcon = ITD.getIconRes("verified");
+        } catch (Exception e) { throw new RuntimeException(e.toString()); }
+    }
+
+
+    private void calcHeights(JSONArray posts) { //расчёт высот всего что может пригодиться
         for (int i = 0; i < posts.size(); i++) {
+            //получение поста, репостнутого поста и вложений
             JSONObject post = (JSONObject) posts.get(i);
             JSONObject originalPost = post.getObject("originalPost");
             JSONArray attachments = post.getArray("attachments");
+
+            //разбиение текста поста по строкам
             String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*2);
             strings.addElement(content);
 
+            //расчёт высоты поста с учётом только главного текста
             int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
 
-            int postContentHeight = 0;
-//            Vector postMediaHeightsVector = new Vector();
+            //расчёт высоты контента поста (при наличии)
+            //если в посте есть фото/медиа
             if (!attachments.isEmpty()) {
+                int postContentHeight = 0;
+
                 for (int j = 0; j < attachments.size(); j++) {
                     JSONObject attachmentInfo = attachments.getObject(j);
 
+                    //прибавление к высоте поста высоту каждой фотки + паддинг
                     int mediaHeight = getMediaHeight(attachmentInfo, mediaWidth);
                     postContentHeight += mediaHeight + PADDING;
 
+                    //сохранение высоты медиа в словарь
                     String fileName = ITD.getFileName(attachmentInfo.getString("url"));
                     mediaHeights.put(fileName, new Integer(mediaHeight));
                 }
+
+                postHeight += postContentHeight;
             }
-            else if (originalPost != null) {
+            //если это репост
+            if (originalPost != null) {
+                int postContentHeight = 0;
+
+                //прибавление к высоте поста высоты заголовка репоста
                 postContentHeight += PADDING*3 + AVATAR_SIZE + 2;
 
+                //разбиение текста репоста по строкам, прибавление его высоты к высоте поста
                 String[] repostContent = split(originalPost.getString("content"), fontPlain, screenWidth - PADDING*4 - 2);
-                if (repostContent.length != 0) {
-                    postContentHeight += lineHeight * repostContent.length + PADDING;
-                }
+                postContentHeight += (repostContent.length != 0) ? lineHeight*repostContent.length+PADDING : 0;
                 repostStrings.addElement(repostContent);
 
+                //прибавление высот медиа, сохранение в словарь
                 JSONArray repostAttachments = originalPost.getArray("attachments");
                 if (!repostAttachments.isEmpty()) {
                     for (int j = 0; j < repostAttachments.size(); j++) {
                         JSONObject attachmentInfo = repostAttachments.getObject(j);
 
-                        int mediaHeight = getMediaHeight(attachmentInfo, mediaWidth - PADDING*2 - 2);
+                        int mediaHeight = getMediaHeight(attachmentInfo, repostMediaWidth);
                         postContentHeight += mediaHeight + PADDING;
 
                         String fileName = ITD.getFileName(attachmentInfo.getString("url"));
                         mediaHeights.put(fileName, new Integer(mediaHeight));
                     }
                 }
+                //сохранение высоты репоста и прибавление к общей высоте
                 repostHeights.addElement(new Integer(postContentHeight));
+                postHeight += postContentHeight;
             }
-            postHeight += postContentHeight;
-
-            if (originalPost == null) {
+            else { //если не репост
                 repostStrings.addElement(null);
                 repostHeights.addElement(null);
             }
 
-//            postsMediaHeights.addElement(new Integer(postMediaHeight));
-
-//            Integer[] postMediaHeights = new Integer[postMediaHeightsVector.size()];
-//            postMediaHeightsVector.copyInto(postMediaHeights);
-
-            ITD.log(postHeight);
+            ITD.log("Высота поста " + postHeight);
+            //сохранение высоты поста
             postsHeights.addElement(new Integer (postHeight));
         }
+    }
 
+
+    private void initMediaLoader() {
+        ITD.log("медиа поток");
+        mediaLoader = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    while (mediasQueue.isEmpty()) {
+                        synchronized (mediasQueue) {
+                            try {
+                                mediasQueue.wait(); //пик шизы
+                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
+                        }
+                    }
+
+                    Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
+                    String fileName = (String) mediaRequest.elementAt(0);
+                    int offset = ((Integer) mediaRequest.elementAt(1)).intValue();
+                    int mediaWidth = screenWidth - PADDING*2 - offset*2;
+                    String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
+
+                    InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
+                    Image media;
+                    try {
+                        media = Image.createImage(mediaRaw);
+
+                        int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
+                        if (media.getHeight() != mediaHeight) {
+                            ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
+//                        postMediaHeights[mediaIndex] = new Integer(attach.getHeight());
+                            mediaHeights.put(fileName, new Integer(media.getHeight()));
+
+                            int postIndex = ((Integer) mediaRequest.elementAt(2)).intValue();
+                            Integer newPostHeight = new Integer(((Integer) postsHeights.elementAt(postIndex)).intValue() + (media.getHeight() - mediaHeight));
+                            postsHeights.setElementAt(newPostHeight, postIndex);
+
+                            repaint();
+                            return;
+                        }
+                    } catch (Exception e) {
+                        ITD.log("Ошибка создания медиа " + e);
+                        media = Image.createImage(mediaWidth, 100);
+                    }
+
+                    medias.put(fileName, media);
+                    mediasQueue.removeElementAt(0);
+
+                    repaint();
+                }
+            }
+        });
+
+        ITD.log("медиа поток запуск");
+        mediaLoader.start();
+    }
+
+
+    private void initAvatarLoader() {
+        ITD.log("аватар поток");
         avatarLoader = new Thread(new Runnable() {
             public void run() {
                 while (true) {
@@ -179,56 +275,12 @@ public class FeedCanvas extends Canvas {
                 }
             }
         });
-        mediaLoader = new Thread(new Runnable() {
-            public void run() {
-                while (true) {
-                    while (mediasQueue.isEmpty()) {
-                        synchronized (mediasQueue) {
-                            try {
-                                mediasQueue.wait(); //пик шизы
-                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
-                        }
-                    }
 
-                    Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
-                    String fileName = (String) mediaRequest.elementAt(0);
-                    int offset = ((Integer) mediaRequest.elementAt(1)).intValue();
-                    int mediaWidth = screenWidth - PADDING*2 - offset*2;
-                    String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
-
-                    InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
-                    Image media = Image.createImage(mediaWidth, 100);
-                    try {
-                        media = Image.createImage(mediaRaw);
-                    } catch (IOException e) { ITD.log("Ошибка создания медиа " + e); }
-
-                    int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
-                    if (media.getHeight() != mediaHeight) {
-                        ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
-//                        postMediaHeights[mediaIndex] = new Integer(attach.getHeight());
-                        mediaHeights.put(fileName, new Integer(media.getHeight()));
-
-                        int postIndex = ((Integer) mediaRequest.elementAt(2)).intValue();
-                        Integer newPostHeight = new Integer(((Integer) postsHeights.elementAt(postIndex)).intValue() + (media.getHeight() - mediaHeight));
-                        postsHeights.setElementAt(newPostHeight, postIndex);
-
-                        repaint();
-                        return;
-                    }
-
-                    medias.put(fileName, media);
-                    mediasQueue.removeElementAt(0);
-
-                    repaint();
-                }
-            }
-        });
+        ITD.log("аватар поток запуск");
         avatarLoader.start();
-        mediaLoader.start();
     }
 
 
-    // === ГЛАВНЫЙ МЕТОД ОТРИСОВКИ ===
     protected void paint(final Graphics g) {
         // 1. Очистка экрана
         g.setColor(COLOR_BG);
@@ -365,8 +417,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    // === ОБРАБОТКА НАЖАТИЙ КЛАВИШ ===
-    protected void keyPressed(int keyCode) {
+    protected void keyPressed(int keyCode) { //обработка нажатий клавищ
         int action = getGameAction(keyCode);
 
         int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
@@ -378,49 +429,117 @@ public class FeedCanvas extends Canvas {
         }
 
         if (action == UP) {
-            if (selectedIndex > 0) {
-                int prevPostHeight = ((Integer) postsHeights.elementAt(selectedIndex - 1)).intValue();
+            onUp(selectedPostHeight, scrolledHeight);
+        }
+        else if (action == DOWN) {
+            onDown(selectedPostHeight, scrolledHeight);
+        }
+        else if (action == FIRE) {
+            onFire();
+        }
 
-                // Логика "умного" скролла вверх
-//                if (scrolledHeight < scrollY) {
-                if (selectedPostHeight > screenHeight) {
-                    if (scrollY == scrolledHeight) {
-                        if (prevPostHeight > screenHeight) {
-                            selectedIndex--;
-                            scrollY = scrolledHeight - screenHeight;
-                            ITD.log("scroll up state 1");
-                        }
-                        else {
-                            selectedIndex--;
-                            scrollY = scrolledHeight - prevPostHeight;
-                            ITD.log("scroll up state 2");
-                        }
-                    }
-                    else if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
-                        scrollY = scrolledHeight;
-                        ITD.log("scroll up state 3");
+        // Обязательно вызываем перерисовку после изменений!
+        System.out.println(scrollY);
+        repaint();
+    }
+
+
+    private void onFire() {
+        // Нажатие центральной кнопки (ОК) - Лайк
+        JSONObject post = (JSONObject) posts.get(selectedIndex);
+        boolean isLiked = post.getBoolean("isLiked");
+        isLiked = !isLiked;
+
+        String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
+        if (isLiked) {
+            ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+        }
+        else {
+            ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+        }
+
+        post.put("isLiked", isLiked);
+        posts.remove(selectedIndex);
+        posts.put(selectedIndex, post);
+    }
+
+
+    private void onDown(int selectedPostHeight, int scrolledHeight) {
+        if (selectedIndex < posts.size() - 1) { // если не последний пост
+            int nextPostHeight = ((Integer) postsHeights.elementAt(selectedIndex + 1)).intValue();
+
+            // Логика "умного" скролла вниз
+//                if (scrolledHeight + selectedPostHeight + nextPostHeight > scrollY + screenHeight) {
+            if (selectedPostHeight > screenHeight) { // если текущий пост выше чем экран
+                if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) { // если самый конец поста
+                    if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
+                        selectedIndex++;
+                        scrollY = scrolledHeight + selectedPostHeight; // прокрутить в самое начало следующего поста
+                        ITD.log("scroll down state 1");
                     }
                     else {
-                        scrollY = scrollY - SCROLL_HEIGHT;
-                        ITD.log("scroll up state 4");
+                        selectedIndex++;
+                        scrollY = scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight; // прокрутить в конец следующего поста
+                        ITD.log("scroll down state 2");
                     }
                 }
+                else if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
+                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
+                    ITD.log("scroll down state 3");
+                }
                 else {
+                    scrollY = scrollY + SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
+                    ITD.log("scroll down state 4");
+                }
+            }
+            else {
+                if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
+                    selectedIndex++;
+                    scrollY = scrolledHeight + selectedPostHeight; // прокрутить в начало следующего поста
+                    ITD.log("scroll down state 5");
+                }
+                else {
+                    selectedIndex++;
+                    scrollY = Math.max(scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight, 0); // прокрутить в конец следующего поста, ограничение чтобы не уезжать за верх
+                    ITD.log("scroll down state 6");
+                }
+            }
+            ITD.log(selectedPostHeight);
+//                }
+        }
+        else if (selectedPostHeight > screenHeight) { // если последний пост и он выше чем экран
+            if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
+                scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
+                ITD.log("scroll down state 3");
+            }
+            else {
+                scrollY = scrollY + SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
+                ITD.log("scroll down state 4");
+            }
+        }
+    }
+
+
+    private void onUp(int selectedPostHeight, int scrolledHeight) {
+        if (selectedIndex > 0) {
+            int prevPostHeight = ((Integer) postsHeights.elementAt(selectedIndex - 1)).intValue();
+
+            // Логика "умного" скролла вверх
+//                if (scrolledHeight < scrollY) {
+            if (selectedPostHeight > screenHeight) {
+                if (scrollY == scrolledHeight) {
                     if (prevPostHeight > screenHeight) {
                         selectedIndex--;
                         scrollY = scrolledHeight - screenHeight;
-                        ITD.log("scroll up state 5");
+                        ITD.log("scroll up state 1");
                     }
                     else {
                         selectedIndex--;
-                        scrollY = Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedPostHeight - screenHeight);
-                        ITD.log("scroll up state 6");
+                        scrollY = scrolledHeight - prevPostHeight;
+                        ITD.log("scroll up state 2");
                     }
                 }
-                ITD.log(selectedPostHeight);
-            }
-            else if (selectedPostHeight > screenHeight) {
-                if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
+                else if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
                     scrollY = scrolledHeight;
                     ITD.log("scroll up state 3");
                 }
@@ -429,83 +548,30 @@ public class FeedCanvas extends Canvas {
                     ITD.log("scroll up state 4");
                 }
             }
-        }
-        else if (action == DOWN) {
-            if (selectedIndex < posts.size() - 1) {
-                int nextPostHeight = ((Integer) postsHeights.elementAt(selectedIndex + 1)).intValue();
-
-                // Логика "умного" скролла вниз
-//                if (scrolledHeight + selectedPostHeight + nextPostHeight > scrollY + screenHeight) {
-                if (selectedPostHeight > screenHeight) {
-                    if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) {
-                        if (nextPostHeight > screenHeight) {
-                            selectedIndex++;
-                            scrollY = scrolledHeight + selectedPostHeight;
-                            ITD.log("scroll down state 1");
-                        }
-                        else {
-                            selectedIndex++;
-                            scrollY = scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight;
-                            ITD.log("scroll down state 2");
-                        }
-                    }
-                    else if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) {
-                        scrollY = scrolledHeight + selectedPostHeight - screenHeight;
-                        ITD.log("scroll down state 3");
-                    }
-                    else {
-                        scrollY = scrollY + SCROLL_HEIGHT;
-                        ITD.log("scroll down state 4");
-                    }
+            else {
+                if (prevPostHeight > screenHeight) {
+                    selectedIndex--;
+                    scrollY = scrolledHeight - screenHeight;
+                    ITD.log("scroll up state 5");
                 }
                 else {
-                    if (nextPostHeight > screenHeight) {
-                        selectedIndex++;
-                        scrollY = scrolledHeight + selectedPostHeight;
-                        ITD.log("scroll down state 5");
-                    }
-                    else {
-                        selectedIndex++;
-                        scrollY = Math.max(scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight, 0);
-                        ITD.log("scroll down state 6");
-                    }
-                }
-                ITD.log(selectedPostHeight);
-//                }
-            }
-            else if (selectedPostHeight > screenHeight) {
-                if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) {
-                    scrollY = scrolledHeight + selectedPostHeight - screenHeight;
-                    ITD.log("scroll down state 3");
-                }
-                else {
-                    scrollY = scrollY + SCROLL_HEIGHT;
-                    ITD.log("scroll down state 4");
+                    selectedIndex--;
+                    scrollY = Math.max(Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedPostHeight - screenHeight), 0);
+                    ITD.log("scroll up state 6");
                 }
             }
+            ITD.log(selectedPostHeight);
         }
-        else if (action == FIRE) {
-            // Нажатие центральной кнопки (ОК) - Лайк
-            JSONObject post = (JSONObject) posts.get(selectedIndex);
-            boolean isLiked = post.getBoolean("isLiked");
-            isLiked = !isLiked;
-
-            String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
-            if (isLiked) {
-                ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+        else if (selectedPostHeight > screenHeight) {
+            if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
+                scrollY = scrolledHeight;
+                ITD.log("scroll up state 3");
             }
             else {
-                ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+                scrollY = scrollY - SCROLL_HEIGHT;
+                ITD.log("scroll up state 4");
             }
-
-            post.put("isLiked", isLiked);
-            posts.remove(selectedIndex);
-            posts.put(selectedIndex, post);
         }
-
-        // Обязательно вызываем перерисовку после изменений!
-        System.out.println(scrollY);
-        repaint();
     }
 
 
@@ -630,7 +696,7 @@ public class FeedCanvas extends Canvas {
         g.setFont(fontBold);
         g.setColor(COLOR_TEXT);
         g.drawString(
-                String.valueOf(createdAt) + " секунд назад",
+                createdAt + " секунд назад",
                 PADDING * 2 + AVATAR_SIZE + offset,
                 currentY + PADDING*2 + lineHeight - 2,
                 Graphics.TOP | Graphics.LEFT
@@ -706,6 +772,7 @@ public class FeedCanvas extends Canvas {
         return mediaHeightsSum;
     }
 
+
     private int getMediaHeight(JSONObject attachmentInfo, int mediaWidth) {
         int width = attachmentInfo.getInt("width");
         int height = attachmentInfo.getInt("height");
@@ -715,5 +782,13 @@ public class FeedCanvas extends Canvas {
 
 //        postMediaHeightsVector.addElement(new Integer(mediaHeight));
         return mediaHeight;
+    }
+
+
+    public void stopFeed() {
+        avatarLoader.interrupt();
+        mediaLoader.interrupt();
+        setCommandListener(null);
+        removeCommand(midlet.backToMenuCmd);
     }
 }
