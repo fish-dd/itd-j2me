@@ -9,6 +9,7 @@ import javax.microedition.lcdui.*;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.rms.RecordStore;
 import java.io.*;
+import java.util.Vector;
 
 public class ITD extends MIDlet {
     static final boolean DEBUG = true;
@@ -40,19 +41,22 @@ public class ITD extends MIDlet {
     private Image notificationsIcon;
     private Image profileIcon;
     private Image settingsIcon;
-    private Image[] menuIcons = {feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
+    private Image[] menuIcons;
     private CommandListener menuCmdListener;
     private Command menuSelectCmd;
 
     public CommandListener feedCmdListener;
     public Command backToMenuCmd;
 
+    public CommandListener settingsCmdListener;
+
     public Thread connectThread;
     private String refreshToken;
 
-    private final String RECORD_STORE_NAME = "itd-db";
-    private final int REFRESH_TOKEN_RECORD_ID = 1;
-    private RecordStore recorder;
+    private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
+    private RecordStore refreshTokenRec;
+    private final String SETTINGS_RECORD_STORE_NAME = "itd-db";
+    private RecordStore settingsRec;
 
 
     protected void startApp() {
@@ -66,8 +70,6 @@ public class ITD extends MIDlet {
         startForm = new Form(NAME);
         display.setCurrent(startForm);
 
-        initMenuList();
-
         try {
             feedIcon = getIconRes("home");
             searchIcon = getIconRes("search");
@@ -75,10 +77,13 @@ public class ITD extends MIDlet {
             profileIcon = getIconRes("account");
             settingsIcon = getIconRes("settings");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
+        menuIcons = new Image[]{feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
+
+        initMenuList();
 
         startForm.append("Открытие хранилища записей...\n");
         try {
-            recorder = RecordStore.openRecordStore(RECORD_STORE_NAME, true);
+            refreshTokenRec = RecordStore.openRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME, true);
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         startForm.append("Попытка достучаться до прокси...\n");
@@ -103,7 +108,7 @@ public class ITD extends MIDlet {
 
     protected void destroyApp(boolean unconditional) {
         try {
-            recorder.closeRecordStore();
+            refreshTokenRec.closeRecordStore();
         } catch (Exception ignored) {}
     }
 
@@ -131,6 +136,16 @@ public class ITD extends MIDlet {
                 }
                 else if (menuList.isSelected(3)) {
                     initProfileCanvas();
+                }
+                else if (menuList.isSelected(4)) {
+                    initSettingsForm();
+                }
+            }
+        };
+        settingsCmdListener = new CommandListener() {
+            public void commandAction(Command command, Displayable displayable) {
+                if (command == backToMenuCmd) {
+                    display.setCurrent(menuList);
                 }
             }
         };
@@ -282,8 +297,8 @@ public class ITD extends MIDlet {
         this.tokenForm = new Form("Вход");
 
         try {
-            if (recorder.getNumRecords() >= 1) {
-                this.refreshToken = new String(recorder.getRecord(REFRESH_TOKEN_RECORD_ID), "UTF-8");
+            if (refreshTokenRec.getNumRecords() >= 1) {
+                this.refreshToken = new String(refreshTokenRec.getRecord(1), "UTF-8");
                 initFeedCanvas();
                 return;
             }
@@ -307,9 +322,9 @@ public class ITD extends MIDlet {
                     byte[] refreshTokenBytes = refreshToken.getBytes();
                     startForm.append("Запись токена в RMS...\n");
                     try {
-                        RecordStore.deleteRecordStore(RECORD_STORE_NAME);
+                        RecordStore.deleteRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME);
                     } catch(Exception ignored) {}
-                    recorder.addRecord(refreshTokenBytes, 0, refreshTokenBytes.length);
+                    refreshTokenRec.addRecord(refreshTokenBytes, 0, refreshTokenBytes.length);
                 } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
                 startForm.append("Запуск фида...\n");
@@ -355,7 +370,7 @@ public class ITD extends MIDlet {
 
 
     private void initProfileCanvas() {
-        final String profileUrl = API_URL + "/profile";
+        final String profileUrl = API_URL + "/users/me";
         final ITD midlet = this;
 
         Runnable getPostsRunnable = new Runnable() {
@@ -364,7 +379,7 @@ public class ITD extends MIDlet {
 
                 JSONObject profile = JSON.getObject(profileResponse);
 
-                String username = profile.getObject("user").getString("username");
+                String username = profile.getString("username");
                 String postsUrl = API_URL + "/posts/user/" + username + "?limit=" + POSTS_LIMIT + "&sort=new";
                 String postsResponse = getRequest(postsUrl, refreshToken);
                 JSONObject json = JSON.getObject(postsResponse);
@@ -379,6 +394,15 @@ public class ITD extends MIDlet {
     }
 
 
+    private void initSettingsForm() {
+        Form settingsForm = new Form("Настройки");
+        settingsForm.setCommandListener(settingsCmdListener);
+        settingsForm.addCommand(backToMenuCmd);
+        settingsForm.append("Тут будут настройки");
+        display.setCurrent(settingsForm);
+    }
+
+
     public String getRefreshToken() {
         return this.refreshToken;
     }
@@ -388,6 +412,15 @@ public class ITD extends MIDlet {
         int numSum = 0;
         for (int i = start; i < end; i++) {
             numSum = numSum + numArray[i].intValue();
+        }
+        return numSum;
+    }
+
+
+    public static int sum(Vector numVector, int start, int end) {
+        int numSum = 0;
+        for (int i = start; i < end; i++) {
+            numSum = numSum + ((Integer) numVector.elementAt(i)).intValue();
         }
         return numSum;
     }

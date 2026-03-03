@@ -4,5 +4,10 @@ MicroEdition-Profile: MIDP-2.0
 MIDlet-Vendor: ultimate_fish
 MIDlet-Version: 0.0.7
 MIDlet-Name: итд
-MIDlet-1: итд,,ultimate.fish.ITD
+MIDlet-1: итд,/itd.png,ultimate.fish.ITD
 MIDlet-Jar-URL: itd-j2me.jar
+MIDlet-Icon: /itd.png
+Nokia-Scalable-Icon: /itd.svg
+Nokia-Scalable-Icon-MIDlet-1: /itd.svg
+MIDlet-Permissions: javax.microedition.io.Connector.http
+Nokia-MIDlet-Background-Event: pause
