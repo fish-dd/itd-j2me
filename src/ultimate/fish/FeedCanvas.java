@@ -68,6 +68,7 @@ public class FeedCanvas extends Canvas {
     Image repostIcon;
     Image verifiedIcon;
 
+    int headerHeight = 0;
 
     public FeedCanvas(JSONArray posts, ITD midlet) {
         this.posts = posts;
@@ -306,8 +307,8 @@ public class FeedCanvas extends Canvas {
         String[] content = (String[]) strings.elementAt(postIndex);
 
         // Оптимизация: Рисуем, только если пост попадает в экран
-        ITD.log("условия отрисовки поста " + (currentY + postHeight) + " " + (currentY + ITD.sum(postsHeights, 0, postIndex)));
-        if (currentY + postHeight > 0 && currentY + ITD.sum(postsHeights, 0, postIndex) + postHeight >= 0) {
+        ITD.log("условия отрисовки поста " + (currentY + postHeight) + (currentY + postHeight > 0) + " " + (headerHeight + ITD.sum(postsHeights, 0, postIndex) + postHeight) + (headerHeight + ITD.sum(postsHeights, 0, postIndex) < scrollY + screenHeight) + " " + scrollY + " " + currentY);
+        if (currentY + postHeight > 0 && ITD.sum(postsHeights, 0, postIndex) < scrollY + screenHeight) {
             JSONObject originalPost = post.getObject("originalPost");
 
             // Рисуем фон выделения, если пост выбран курсором

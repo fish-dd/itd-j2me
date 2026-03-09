@@ -10,7 +10,6 @@ import java.util.Vector;
 public class ProfileCanvas extends FeedCanvas {
     private JSONObject profile;
 
-    private int headerHeight;
     private int bannerHeight;
 
 
@@ -38,8 +37,10 @@ public class ProfileCanvas extends FeedCanvas {
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
 
-        drawProfileHeader(g, currentY);
-        currentY += headerHeight;
+        if (selectedIndex == 0) { //мне слишком лень делать нормальную логику скролла, текущая писалась кровью и потом
+            drawProfileHeader(g, currentY);
+            currentY += headerHeight; //пусть если шапка не в фокусе, то она не показывается вообще
+        }
 
         for (int elementIndex = 0; elementIndex < posts.size(); elementIndex++) {
             drawPost(g, elementIndex, elementIndex+1, currentY);
@@ -58,8 +59,13 @@ public class ProfileCanvas extends FeedCanvas {
             g.setColor(COLOR_TEXT);
             g.fillRect(0, currentY, screenWidth, bannerHeight);
 
+            g.setColor(COLOR_BG);
+            g.setFont(fontBold);
+            g.drawString("Заготовка", 0, currentY, Graphics.TOP | Graphics.LEFT);
+
             int userDataY = currentY + PADDING + bannerHeight;
 
+            g.setColor(COLOR_TEXT);
             // Рисуем аватарку
             String emoji = profile.getString("avatar");
             String emojiId = getEmojiId(emoji);

@@ -286,6 +286,7 @@ public class ITD extends MIDlet {
         System.out.println(object);
     }
 
+
     static void log(int integer) {
         if (!ITD.DEBUG) return;
 
@@ -299,8 +300,18 @@ public class ITD extends MIDlet {
         try {
             if (refreshTokenRec.getNumRecords() >= 1) {
                 this.refreshToken = new String(refreshTokenRec.getRecord(1), "UTF-8");
-                initFeedCanvas();
-                return;
+
+                for (int i = 0; i < 3; i++) {
+                    startForm.append("Проверка токена...\n");
+
+                    boolean isTokenValid = getRequest(URL + "/valid", refreshToken).equals("true");
+                    if (isTokenValid) {
+                        initFeedCanvas();
+                        return;
+                    }
+                }
+
+                tokenForm.append("Кажется, токен недействителен.\n");
             }
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
@@ -430,9 +441,11 @@ public class ITD extends MIDlet {
         return url.substring(url.lastIndexOf('/') + 1);
     }
 
+
     public static int toInt(Object num) {
         return ((Integer) num).intValue();
     }
+
 
     public static Image getIconRes(String path) throws IOException {
         return Image.createImage(Class.class.getResourceAsStream("/" + path + ".png"));
