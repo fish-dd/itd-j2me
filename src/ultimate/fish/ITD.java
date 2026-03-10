@@ -1,4 +1,6 @@
 package ultimate.fish;
+
+//нектар шиновона, межгалактический респект
 import cc.nnproject.json.JSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
@@ -12,17 +14,18 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = true;
+    static final boolean DEBUG = false;
     private boolean isAlreadyRunning = false;
 
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:5000"};
-    static String URL = URLS[0];
+    static String URL = URLS[2];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
     static int POSTS_LIMIT = 5;
+    static int J2ME_LOADER_FIX_SLEEP = 200;
 
     private Form startForm;
 
@@ -68,6 +71,7 @@ public class ITD extends MIDlet {
         initCommands();
 
         startForm = new Form(NAME);
+        loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(startForm);
 
         try {
@@ -121,6 +125,7 @@ public class ITD extends MIDlet {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == backToMenuCmd) {
                     ((FeedCanvas) displayable).stopFeed();
+                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
                     display.setCurrent(menuList);
                 }
             }
@@ -145,6 +150,7 @@ public class ITD extends MIDlet {
         settingsCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == backToMenuCmd) {
+                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
                     display.setCurrent(menuList);
                 }
             }
@@ -315,7 +321,8 @@ public class ITD extends MIDlet {
             }
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
-        tokenForm.append("Введите refresh-токен");
+        tokenForm.append("Введите refresh-токен.\n" +
+                "Он находится в cookie браузера");
 
         final TextField keyInput = new TextField("Токен:", null, 128, TextField.ANY);
         tokenForm.append(keyInput);
@@ -325,6 +332,7 @@ public class ITD extends MIDlet {
         ItemCommandListener commandListener = new ItemCommandListener() {
             public void commandAction(Command command, Item item) {
                 tokenForm.deleteAll();
+                loaderSleep(); //потому что ж2ме лоудер крашится без этого
                 display.setCurrent(startForm);
                 startForm.append("Сохранение токена...\n");
 
@@ -345,6 +353,7 @@ public class ITD extends MIDlet {
         button.setItemCommandListener(commandListener);
         tokenForm.append(button);
 
+        loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(tokenForm);
     }
 
@@ -364,6 +373,7 @@ public class ITD extends MIDlet {
 
                 startForm.append("Иницализация экрана фида...\n");
                 FeedCanvas feedCanvas = new FeedCanvas(posts, midlet);
+                loaderSleep(); //потому что ж2ме лоудер крашится без этого
                 display.setCurrent(feedCanvas);
             }
         };
@@ -397,6 +407,7 @@ public class ITD extends MIDlet {
                 JSONArray posts = json.getObject("data").getArray("posts");
 
                 ProfileCanvas profileCanvas = new ProfileCanvas(profile, posts, midlet);
+                loaderSleep(); //потому что ж2ме лоудер крашится без этого
                 display.setCurrent(profileCanvas);
             }
         };
@@ -410,6 +421,7 @@ public class ITD extends MIDlet {
         settingsForm.setCommandListener(settingsCmdListener);
         settingsForm.addCommand(backToMenuCmd);
         settingsForm.append("Тут будут настройки");
+        loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(settingsForm);
     }
 
@@ -449,5 +461,12 @@ public class ITD extends MIDlet {
 
     public static Image getIconRes(String path) throws IOException {
         return Image.createImage(Class.class.getResourceAsStream("/" + path + ".png"));
+    }
+
+
+    private static void loaderSleep() {
+        try {
+            Thread.sleep(J2ME_LOADER_FIX_SLEEP);
+        } catch (InterruptedException ignored) {}
     }
 }
