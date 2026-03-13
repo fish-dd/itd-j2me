@@ -129,7 +129,7 @@ public class ProfileCanvas extends FeedCanvas {
             onDown(selectedPostHeight, scrolledHeight, posts.size() + 1);
         }
         else if (action == FIRE) {
-            onFire();
+            likePost();
         }
 
         // Обязательно вызываем перерисовку после изменений!

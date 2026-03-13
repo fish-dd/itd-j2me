@@ -74,7 +74,7 @@ public class FeedCanvas extends Canvas {
         this.posts = posts;
         this.midlet = midlet;
 
-        setFullScreenMode(true);
+        setFullScreenMode(false);
         setScreenSize();
         initFonts();
         initIcons();
@@ -85,6 +85,8 @@ public class FeedCanvas extends Canvas {
         initMediaLoader();
 
         setCommandListener(midlet.feedCmdListener);
+        addCommand(midlet.likeCmd);
+        addCommand(midlet.selectCmd);
         addCommand(midlet.backToMenuCmd);
 
         ITD.log("фид стартовал");
@@ -201,7 +203,7 @@ public class FeedCanvas extends Canvas {
                         synchronized (mediasQueue) {
                             try {
                                 mediasQueue.wait(); //пик шизы
-                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
+                            } catch (Exception e) { ITD.log(String.valueOf(e)); } //ожидание реальность
                         }
                     }
 
@@ -256,7 +258,7 @@ public class FeedCanvas extends Canvas {
                         synchronized (avatarsQueue) {
                             try {
                                 avatarsQueue.wait(); //пик шизы
-                            } catch (InterruptedException e) { throw new RuntimeException(e.toString()); }
+                            } catch (Exception e) { ITD.log(String.valueOf(e)); } //ожидание реальность
                         }
                     }
 
@@ -439,9 +441,9 @@ public class FeedCanvas extends Canvas {
         else if (action == DOWN) {
             onDown(selectedPostHeight, scrolledHeight, posts.size());
         }
-        else if (action == FIRE) {
-            onFire();
-        }
+//        else if (action == FIRE) {
+//            likePost();
+//        }
 
         // Обязательно вызываем перерисовку после изменений!
         ITD.log(scrollY);
@@ -449,7 +451,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void onFire() {
+    void likePost() {
         // Нажатие центральной кнопки (ОК) - Лайк
         JSONObject post = (JSONObject) posts.get(selectedIndex);
         boolean isLiked = post.getBoolean("isLiked");
@@ -466,6 +468,8 @@ public class FeedCanvas extends Canvas {
         post.put("isLiked", isLiked);
         posts.remove(selectedIndex);
         posts.put(selectedIndex, post);
+
+        repaint();
     }
 
 
@@ -784,7 +788,9 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    public void stopFeed() { //думал это поможет выгрузить канвас из памяти, оказывается и так норм
+    public void stopFeed() {
+        avatarLoader.interrupt();
+        mediaLoader.interrupt();
         setCommandListener(null);
         removeCommand(midlet.backToMenuCmd);
     }

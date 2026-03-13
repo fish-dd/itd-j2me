@@ -16,6 +16,7 @@ import java.util.Vector;
 public class ITD extends MIDlet {
     static final boolean DEBUG = false;
     private boolean isAlreadyRunning = false;
+    private String appVersion;
 
     private Display display;
 
@@ -46,10 +47,14 @@ public class ITD extends MIDlet {
     private Image settingsIcon;
     private Image[] menuIcons;
     private CommandListener menuCmdListener;
-    private Command menuSelectCmd;
+    public Command selectCmd;
+
+    private CommandListener aboutCmdListener;
+    private Command aboutCmd;
 
     public CommandListener feedCmdListener;
     public Command backToMenuCmd;
+    public Command likeCmd;
 
     public CommandListener settingsCmdListener;
 
@@ -65,6 +70,8 @@ public class ITD extends MIDlet {
     protected void startApp() {
         if (isAlreadyRunning) return;
         isAlreadyRunning = true;
+
+        appVersion = getAppProperty("MIDlet-Version");
 
         display = Display.getDisplay(this);
 
@@ -84,6 +91,10 @@ public class ITD extends MIDlet {
         menuIcons = new Image[]{feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
 
         initMenuList();
+
+        if (!getAppProperty("MIDlet-Vendor").equals("ultimate_fish")) {
+            throw new RuntimeException();
+        }
 
         startForm.append("Открытие хранилища записей...\n");
         try {
@@ -119,11 +130,20 @@ public class ITD extends MIDlet {
 
     private void initCommands() {
         backToMenuCmd = new Command("Назад", Command.BACK, 1);
-        menuSelectCmd = new Command("Открыть", Command.ITEM, 1);
+        selectCmd = new Command("Открыть", Command.OK, 1);
+        aboutCmd = new Command("О программе", Command.HELP, 2);
+        likeCmd = new Command("Лайк", Command.ITEM, 1);
 
         feedCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
-                if (command == backToMenuCmd) {
+                if (command == likeCmd) {
+                    FeedCanvas feed = ((FeedCanvas) displayable);
+                    feed.likePost();
+                }
+                else if (command == selectCmd) {
+                    display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
+                }
+                else if (command == backToMenuCmd) {
                     ((FeedCanvas) displayable).stopFeed();
                     loaderSleep(); //потому что ж2ме лоудер крашится без этого
                     display.setCurrent(menuList);
@@ -132,22 +152,31 @@ public class ITD extends MIDlet {
         };
         menuCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
-                if (command != menuSelectCmd) {
-                    return;
+                if (command == aboutCmd) {
+                    initAboutForm();
                 }
-
-                if (menuList.isSelected(0)) {
-                    initFeedCanvas();
-                }
-                else if (menuList.isSelected(3)) {
-                    initProfileCanvas();
-                }
-                else if (menuList.isSelected(4)) {
-                    initSettingsForm();
+                else if (command == selectCmd) {
+                    if (menuList.isSelected(0)) {
+                        initFeedCanvas();
+                    }
+                    else if (menuList.isSelected(3)) {
+                        initProfileCanvas();
+                    }
+                    else if (menuList.isSelected(4)) {
+                        initSettingsForm();
+                    }
                 }
             }
         };
         settingsCmdListener = new CommandListener() {
+            public void commandAction(Command command, Displayable displayable) {
+                if (command == backToMenuCmd) {
+                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
+                    display.setCurrent(menuList);
+                }
+            }
+        };
+        aboutCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == backToMenuCmd) {
                     loaderSleep(); //потому что ж2ме лоудер крашится без этого
@@ -180,7 +209,7 @@ public class ITD extends MIDlet {
             }
         }
         catch (Exception e) {
-            throw new RuntimeException(String.valueOf(e));
+            log("Ошибка getRequest " + e);
         }
         return null;
     }
@@ -210,7 +239,7 @@ public class ITD extends MIDlet {
             }
         }
         catch (Exception e) {
-            throw new RuntimeException(String.valueOf(e));
+            log("Ошибка getRequest " + e);
         }
         return null;
     }
@@ -228,7 +257,7 @@ public class ITD extends MIDlet {
             }
         }
         catch (Exception e) {
-            throw new RuntimeException(String.valueOf(e));
+            log("Ошибка rawGetRequest " + e);
         }
         return null;
     }
@@ -253,7 +282,7 @@ public class ITD extends MIDlet {
             }
         }
         catch (Exception e) {
-            throw new RuntimeException(String.valueOf(e));
+            log("Ошибка postRequest " + e);
         }
 
         return response;
@@ -279,7 +308,7 @@ public class ITD extends MIDlet {
             }
         }
         catch (Exception e) {
-            throw new RuntimeException(String.valueOf(e));
+            log("Ошибка deleteRequest " + e);
         }
 
         return response;
@@ -386,7 +415,8 @@ public class ITD extends MIDlet {
     private void initMenuList() {
         menuList = new List("Меню", List.IMPLICIT, menuStrings, menuIcons);
         menuList.setCommandListener(menuCmdListener);
-        menuList.addCommand(menuSelectCmd);
+        menuList.addCommand(selectCmd);
+        menuList.addCommand(aboutCmd);
     }
 
 
@@ -423,6 +453,44 @@ public class ITD extends MIDlet {
         settingsForm.append("Тут будут настройки");
         loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(settingsForm);
+    }
+
+
+    private void initAboutForm() {
+        Form aboutForm = new Form("О программе");
+
+        aboutForm.setCommandListener(aboutCmdListener);
+        aboutForm.addCommand(backToMenuCmd);
+
+        StringItem title = new StringItem(null, "итд J2ME v" + appVersion + "\n");
+        title.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_LARGE));
+        title.setLayout(Item.LAYOUT_CENTER);
+        aboutForm.append(title);
+
+        aboutForm.append("by ultimate_fish\n");
+
+        Image logoImg = null;
+        try { logoImg = getIconRes("itd"); } catch (IOException ignored) {}
+        ImageItem logo = new ImageItem(null, logoImg, Item.LAYOUT_CENTER, "Логотип");
+        aboutForm.append(logo);
+
+        StringItem description = new StringItem(null,
+                "Клиент молодёжной соц. сети для несвежих телефонов. Скорее всего ваш 2G тапок дороже 600 рублей его запустит (уже запустил).\n" +
+                "\n" +
+                "Использованные компоненты:\n" +
+                " • NNJSON — github.com/shinovon/nnjson — лицензия MIT\n" +
+                " • Material Symbols — fonts.google.com/icons — лицензия Apache 2.0\n" +
+                "\n" +
+                "Отдельное спасибо:\n" +
+                " • shinovon и nnproject за NNJSON, KEmulator nnmod и вдохновение\n" +
+                " • azukicatisreal и vip0ll за то, что запихали в J2ME\n" +
+                " • Бесчисленным добрякам, пилящим гайды\n" +
+                " • Километрам документаций");
+        description.setLayout(Item.LAYOUT_LEFT);
+        aboutForm.append(description);
+
+        loaderSleep(); //потому что j2me loader что? правильно
+        display.setCurrent(aboutForm);
     }
 
 
