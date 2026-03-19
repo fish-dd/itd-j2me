@@ -10,7 +10,7 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 public class FeedCanvas extends Canvas {
-    JSONArray posts;
+    //JSONArray posts;
     ITD midlet;
 
     Hashtable postsStrings = new Hashtable(); //словарь из массивов со строками постов
@@ -26,8 +26,11 @@ public class FeedCanvas extends Canvas {
     Vector mediasQueue = new Vector();
     Thread mediaLoader;
 
+    Vector elements = new Vector();
+
     // Параметры UI
     int scrollY = 0;         // Смещение прокрутки по вертикали
+    int selectedY;
     int selectedIndex = 0;   // Индекс выбранного поста
     int screenWidth;
     int screenHeight;
@@ -66,7 +69,9 @@ public class FeedCanvas extends Canvas {
     int headerHeight = 0;
 
     public FeedCanvas(JSONArray posts, ITD midlet) {
-        this.posts = posts;
+        for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
+            elements.addElement(posts.get(postIndex));
+        }
         this.midlet = midlet;
 
         setFullScreenMode(false);
@@ -295,10 +300,14 @@ public class FeedCanvas extends Canvas {
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
 
-        for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
-            JSONObject post = (JSONObject) posts.get(postIndex);
-            drawPost(g, currentY, post, postIndex == selectedIndex);
+        for (int postIndex = 0; postIndex < elements.size(); postIndex++) {
+            JSONObject post = (JSONObject) elements.elementAt(postIndex);
+            boolean isSelected = postIndex == selectedIndex;
 
+            drawPost(g, currentY, post, isSelected);
+            if (isSelected) {
+                selectedY = currentY;
+            }
             // Сдвигаем курсор рисования вниз
             currentY += getPostHeight(post);
         }
@@ -328,7 +337,7 @@ public class FeedCanvas extends Canvas {
             }
 
             //содержимое поста
-            drawPostContent(g, post, currentY, content, postsHeights, 0);
+            drawPostContent(g, currentY, post, content, postsHeights, 0);
 
             //репост
             JSONObject repost = post.getObject("originalPost");
@@ -445,14 +454,14 @@ public class FeedCanvas extends Canvas {
     protected void keyPressed(int keyCode) { //обработка нажатий клавиш
         int action = getGameAction(keyCode);
 
-        int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
+        int selectedPostHeight = selectedIndex == 0 ? headerHeight : getPostHeight((JSONObject) elements.elementAt(selectedIndex));
         int scrolledHeight = ITD.sum(postsHeights, 0, selectedIndex);
 
         if (action == UP) {
             onUp(selectedPostHeight, scrolledHeight);
         }
         else if (action == DOWN) {
-            onDown(selectedPostHeight, scrolledHeight, posts.size());
+            onDown(selectedPostHeight, scrolledHeight, elements.size());
         }
 //        else if (action == FIRE) {
 //            likePost();
@@ -465,7 +474,7 @@ public class FeedCanvas extends Canvas {
 
 
     void likePost() {
-        JSONObject post = (JSONObject) posts.get(selectedIndex);
+        JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
         boolean isLiked = post.getBoolean("isLiked");
         isLiked = !isLiked;
 
@@ -478,8 +487,7 @@ public class FeedCanvas extends Canvas {
         }
 
         post.put("isLiked", isLiked);
-        posts.remove(selectedIndex);
-        posts.put(selectedIndex, post);
+        elements.setElementAt(post, selectedIndex);
 
         repaint();
     }
@@ -487,7 +495,7 @@ public class FeedCanvas extends Canvas {
 
     void onDown(int selectedPostHeight, int scrolledHeight, int postsAmount) {
         if (selectedIndex < postsAmount - 1) { // если не последний пост
-            int nextPostHeight = ((Integer) postsHeights.elementAt(selectedIndex + 1)).intValue();
+            int nextPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex + 1));
 
             // Логика "умного" скролла вниз
             if (selectedPostHeight > screenHeight) { // если текущий пост выше чем экран
@@ -542,7 +550,7 @@ public class FeedCanvas extends Canvas {
 
     void onUp(int selectedPostHeight, int scrolledHeight) {
         if (selectedIndex > 0) {
-            int prevPostHeight = ((Integer) postsHeights.elementAt(selectedIndex - 1)).intValue();
+            int prevPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex - 1));
 
             // Логика "умного" скролла вверх
             if (selectedPostHeight > screenHeight) {
@@ -660,7 +668,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void drawPostContent(Graphics g, JSONObject post, int currentY,
+    void drawPostContent(Graphics g, int currentY, JSONObject post,
                          String[] content, Hashtable mediaHeights, int offset) {
         // Рисуем аватарку
         String emoji = post.getObject("author").getString("avatar");
