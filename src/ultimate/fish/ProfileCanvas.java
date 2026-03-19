@@ -1,5 +1,6 @@
 package ultimate.fish;
 
+import cc.nnproject.json.AbstractJSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
@@ -15,6 +16,8 @@ public class ProfileCanvas extends FeedCanvas {
 
     public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
         super(posts, midlet);
+
+        this.posts = posts;
         this.profile = profile;
 
         Vector tempPostsHeights = new Vector();
@@ -42,9 +45,10 @@ public class ProfileCanvas extends FeedCanvas {
             currentY += headerHeight; //пусть если шапка не в фокусе, то она не показывается вообще
         }
 
-        for (int elementIndex = 0; elementIndex < posts.size(); elementIndex++) {
-            drawPost(g, elementIndex, elementIndex+1, currentY);
-            currentY += ((Integer) postsHeights.elementAt(elementIndex+1)).intValue();
+        for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
+            JSONObject post = (JSONObject) posts.get(postIndex);
+            drawPost(g, currentY, post, postIndex, postIndex == selectedIndex);
+            currentY += ((Integer) postsHeights.elementAt(postIndex)).intValue();
         }
     }
 

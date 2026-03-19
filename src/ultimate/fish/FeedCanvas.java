@@ -13,15 +13,10 @@ public class FeedCanvas extends Canvas {
     JSONArray posts;
     ITD midlet;
 
-    Vector strings = new Vector(); //вектор из массивов со строками постов
-    Vector repostStrings = new Vector();
-    Vector postsHeights = new Vector(); //высоты постов
-//    Hashtable mediaPosts = new Hashtable();
-    Hashtable mediaHeights = new Hashtable(); //высоты отдельных медиа
-    Vector repostHeights = new Vector();
-
-    Vector repostsMediaHeights = new Vector(); //высоты отдельных медиа в репостах
-//    Vector postsMediaHeights = new Vector(); //высоты блоков медиа
+    Hashtable postsStrings = new Hashtable(); //словарь из массивов со строками постов
+    Hashtable repostsStrings = new Hashtable();
+    Hashtable postsHeights = new Hashtable(); //высоты постов и отдельных медиа постов
+    Hashtable repostsMediaHeights = new Hashtable(); //высоты репостов и отдельных медиа репостов
 
     Hashtable avatars = new Hashtable();
     Vector avatarsQueue = new Vector();
@@ -55,7 +50,7 @@ public class FeedCanvas extends Canvas {
 
     static final int SCROLL_HEIGHT = 100;
 
-    int mediaWidth;
+    int postMediaWidth;
     int repostMediaWidth;
 
     //иконки
@@ -79,8 +74,6 @@ public class FeedCanvas extends Canvas {
         initFonts();
         initIcons();
 
-        calcHeights(posts);
-
         initAvatarLoader();
         initMediaLoader();
 
@@ -96,8 +89,8 @@ public class FeedCanvas extends Canvas {
     void setScreenSize() {
         screenWidth = getWidth();
         screenHeight = getHeight();
-        mediaWidth = screenWidth - PADDING*2;
-        repostMediaWidth = mediaWidth - PADDING*2 - 2;
+        postMediaWidth = screenWidth - PADDING*2;
+        repostMediaWidth = screenWidth - PADDING*4 - 2;
     }
 
 
@@ -120,77 +113,85 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void calcHeights(JSONArray posts) { //расчёт высот всего что может пригодиться
-        for (int i = 0; i < posts.size(); i++) {
-            //получение поста, репостнутого поста и вложений
-            JSONObject post = (JSONObject) posts.get(i);
-            JSONObject originalPost = post.getObject("originalPost");
-            JSONArray attachments = post.getArray("attachments");
+//    void calcHeights(JSONArray posts) { //расчёт высот всего что может пригодиться
+//        for (int i = 0; i < posts.size(); i++) {
+//            //получение поста, репостнутого поста и вложений
+//            JSONObject post = (JSONObject) posts.get(i);
+//            int postHeight = calcPostHeight(post);
+//            //сохранение высоты поста
+//            postsHeights.addElement(new Integer (postHeight));
+//        }
+//    }
 
-            //разбиение текста поста по строкам
-            String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*2);
-            strings.addElement(content);
 
-            //расчёт высоты поста с учётом только главного текста
-            int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+    private int getPostHeight(JSONObject post) {
+        String postId = post.getString("id");
 
-            //расчёт высоты контента поста (при наличии)
-            //если в посте есть фото/медиа
-            if (!attachments.isEmpty()) {
-                int postContentHeight = 0;
+        if (postsHeights.contains(postId)) {
+            return ((Integer) postsHeights.get(postId)).intValue();
+        }
 
-                for (int j = 0; j < attachments.size(); j++) {
-                    JSONObject attachmentInfo = attachments.getObject(j);
+        return calcPostHeight(post);
+    }
 
-                    //прибавление к высоте поста высоту каждой фотки + паддинг
-                    int mediaHeight = getMediaHeight(attachmentInfo, mediaWidth);
-                    postContentHeight += mediaHeight + PADDING;
 
-                    //сохранение высоты медиа в словарь
-                    String fileName = ITD.getFileName(attachmentInfo.getString("url"));
-                    mediaHeights.put(fileName, new Integer(mediaHeight));
-                }
+    private int calcPostHeight(JSONObject post) {
+        //разбиение текста поста по строкам
+        String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*2);
 
-                postHeight += postContentHeight;
-            }
-            //если это репост
-            if (originalPost != null) {
-                int postContentHeight = 0;
+        //расчёт высоты поста с учётом только главного текста
+        int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
 
-                //прибавление к высоте поста высоты заголовка репоста
-                postContentHeight += PADDING*3 + AVATAR_SIZE + 2;
+        //расчёт высоты контента поста (при наличии)
+        //если в посте есть фото/медиа
+        JSONArray medias = post.getArray("attachments");
+        if (!medias.isEmpty()) {
+            for (int mediaIndex = 0; mediaIndex < medias.size(); mediaIndex++) {
+                JSONObject mediaInfo = medias.getObject(mediaIndex);
 
-                //разбиение текста репоста по строкам, прибавление его высоты к высоте поста
-                String[] repostContent = split(originalPost.getString("content"), fontPlain, screenWidth - PADDING*4 - 2);
-                postContentHeight += (repostContent.length != 0) ? lineHeight*repostContent.length+PADDING : 0;
-                repostStrings.addElement(repostContent);
+                //прибавление к высоте поста высоту каждой фотки + паддинг
+                int mediaHeight = getMediaHeight(mediaInfo, postMediaWidth);
+                postHeight += mediaHeight + PADDING;
 
-                //прибавление высот медиа, сохранение в словарь
-                JSONArray repostAttachments = originalPost.getArray("attachments");
-                if (!repostAttachments.isEmpty()) {
-                    for (int j = 0; j < repostAttachments.size(); j++) {
-                        JSONObject attachmentInfo = repostAttachments.getObject(j);
-
-                        int mediaHeight = getMediaHeight(attachmentInfo, repostMediaWidth);
-                        postContentHeight += mediaHeight + PADDING;
-
-                        String fileName = ITD.getFileName(attachmentInfo.getString("url"));
-                        mediaHeights.put(fileName, new Integer(mediaHeight));
-                    }
-                }
-                //сохранение высоты репоста и прибавление к общей высоте
-                repostHeights.addElement(new Integer(postContentHeight));
-                postHeight += postContentHeight;
-            }
-            else { //если не репост
-                repostStrings.addElement(null);
-                repostHeights.addElement(null);
+                //сохранение высоты медиа в словарь
+                String fileName = ITD.getFileName(mediaInfo.getString("url"));
+                postsHeights.put(fileName, new Integer(mediaHeight));
             }
 
             ITD.log("Высота поста " + postHeight);
-            //сохранение высоты поста
-            postsHeights.addElement(new Integer (postHeight));
+            return postHeight;
         }
+
+        //если это репост
+        JSONObject originalPost = post.getObject("originalPost");
+        if (originalPost != null) {
+            //прибавление к высоте поста высоты заголовка репоста
+            postHeight += PADDING*3 + AVATAR_SIZE + 2;
+
+            //разбиение текста репоста по строкам, прибавление его высоты к высоте поста
+            String[] repostContent = split(originalPost.getString("content"), fontPlain, screenWidth - PADDING*4 - 2);
+            postHeight += (repostContent.length != 0) ? lineHeight*repostContent.length+PADDING : 0;
+
+            //прибавление высот медиа, сохранение в словарь
+            JSONArray repostAttachments = originalPost.getArray("attachments");
+            if (!repostAttachments.isEmpty()) {
+                for (int j = 0; j < repostAttachments.size(); j++) {
+                    JSONObject attachmentInfo = repostAttachments.getObject(j);
+
+                    int mediaHeight = getMediaHeight(attachmentInfo, repostMediaWidth);
+                    postHeight += mediaHeight + PADDING;
+
+                    String fileName = ITD.getFileName(attachmentInfo.getString("url"));
+                    repostsMediaHeights.put(fileName, new Integer(mediaHeight));
+                }
+            }
+
+            ITD.log("Высота поста " + postHeight);
+            return postHeight;
+        }
+
+        ITD.log("Высота поста " + postHeight);
+        return postHeight;
     }
 
 
@@ -209,29 +210,31 @@ public class FeedCanvas extends Canvas {
 
                     Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
                     String fileName = (String) mediaRequest.elementAt(0);
-                    int offset = ((Integer) mediaRequest.elementAt(1)).intValue();
-                    int mediaWidth = screenWidth - PADDING*2 - offset*2;
+                    boolean isRepost = ((Boolean) mediaRequest.elementAt(1)).booleanValue();
+                    String postId = (String) mediaRequest.elementAt(2);
+
+                    int mediaWidth = isRepost ? postMediaWidth : repostMediaWidth;
                     String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
 
+                    Hashtable heightsCache = isRepost ? postsHeights : repostsMediaHeights;
                     InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
                     Image media;
                     try {
                         media = Image.createImage(mediaRaw);
 
-                        int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
+                        int mediaHeight = ((Integer) heightsCache.get(fileName)).intValue();
                         if (media.getHeight() != mediaHeight) {
                             ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
-//                        postMediaHeights[mediaIndex] = new Integer(attach.getHeight());
-                            mediaHeights.put(fileName, new Integer(media.getHeight()));
+                            heightsCache.put(fileName, new Integer(media.getHeight()));
 
-                            int postIndex = ((Integer) mediaRequest.elementAt(2)).intValue();
-                            Integer newPostHeight = new Integer(((Integer) postsHeights.elementAt(postIndex)).intValue() + (media.getHeight() - mediaHeight));
-                            postsHeights.setElementAt(newPostHeight, postIndex);
+                            Integer newPostHeight = new Integer(((Integer) postsHeights.get(postId)).intValue() + media.getHeight() - mediaHeight);
+                            postsHeights.put(postId, newPostHeight);
 
                             repaint();
                             return;
                         }
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e) {
                         ITD.log("Ошибка создания медиа " + e);
                         media = Image.createImage(mediaWidth, 100);
                     }
@@ -293,55 +296,65 @@ public class FeedCanvas extends Canvas {
         int currentY = -scrollY;
 
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
-            drawPost(g, postIndex, postIndex, currentY);
+            JSONObject post = (JSONObject) posts.get(postIndex);
+            drawPost(g, currentY, post, postIndex == selectedIndex);
 
             // Сдвигаем курсор рисования вниз
-            currentY += ((Integer) postsHeights.elementAt(postIndex)).intValue();
+            currentY += getPostHeight(post);
         }
     }
 
 
-    void drawPost(Graphics g, int postIndex, int postHeightIndex, int currentY) {
-        JSONObject post = (JSONObject) posts.get(postIndex);
+    void drawPost(Graphics g, int currentY, JSONObject post, boolean isSelected) {
+        String id = post.getString("id");
 
-        // Рассчитываем высоту этого поста
-        int postHeight = ((Integer) postsHeights.elementAt(postHeightIndex)).intValue();
-        String[] content = (String[]) strings.elementAt(postIndex);
+        String[] content;
+        if (postsStrings.contains(id)) {
+            content = (String[]) postsStrings.get(id);
+        }
+        else {
+            content = split(post.getString("content"), fontPlain, screenWidth - PADDING*2);
+            postsStrings.put(id, content);
+        }
+
+        int postHeight = getPostHeight(post);
 
         // Оптимизация: Рисуем, только если пост попадает в экран
-        ITD.log("условия отрисовки поста " + (currentY + postHeight) + (currentY + postHeight > 0) + " " + (headerHeight + ITD.sum(postsHeights, 0, postIndex) + postHeight) + (headerHeight + ITD.sum(postsHeights, 0, postIndex) < scrollY + screenHeight) + " " + scrollY + " " + currentY);
-        if (currentY + postHeight > 0 && ITD.sum(postsHeights, 0, postIndex) < scrollY + screenHeight) {
-            JSONObject originalPost = post.getObject("originalPost");
-
+        if (currentY + postHeight > 0 && currentY < screenHeight) {
             // Рисуем фон выделения, если пост выбран курсором
-            if (postHeightIndex == selectedIndex) {
+            if (isSelected) {
                 g.setColor(COLOR_SEL);
                 g.fillRect(0, currentY, screenWidth, postHeight);
             }
 
             //содержимое поста
-            renderPostContent(g, post, currentY, content, mediaHeights, 0, postIndex);
+            drawPostContent(g, post, currentY, content, postsHeights, 0);
 
             //репост
-            if (originalPost != null) {
-                int repostY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight*content.length + 1;
+            JSONObject repost = post.getObject("originalPost");
+            if (repost != null) {
+                String repostId = repost.getString("id");
+
+                int repostY = currentY + PADDING * 3 + AVATAR_SIZE + lineHeight * content.length + 1;
                 g.drawRect(
-                        PADDING+1,
+                        PADDING + 1,
                         repostY,
-                        mediaWidth-2,
-                        ITD.toInt(repostHeights.elementAt(postIndex)) - PADDING
+                        postMediaWidth - 2,
+                        postHeight - repostY - PADDING - ICON_SIZE
                 );
-                int repostWidth = screenWidth - PADDING*4 - 2;
-                String[] repostContent = (String[]) repostStrings.elementAt(postIndex);
-//                    g.drawString(
-//                            "РЕПОООООСТ",
-//                            PADDING,
-//                            repostY,
-//                            Graphics.TOP | Graphics.LEFT
-//                    );
+                int repostWidth = screenWidth - PADDING * 4 - 2;
+
+                String[] repostContent;
+                if (repostsStrings.contains(repostId)) {
+                    repostContent = (String[]) postsStrings.get(repostId);
+                }
+                else {
+                    repostContent = split(repost.getString("content"), fontPlain, repostWidth);
+                    repostsStrings.put(repostId, content);
+                }
 
                 //содержимое репоста
-                renderPostContent(g, originalPost, repostY, repostContent, mediaHeights, PADDING+1, postIndex);
+                drawPostContent(g, repostY, repost, repostContent, repostsMediaHeights, PADDING+1);
             }
 
             drawMetadata(g, currentY, postHeight, post);
@@ -452,7 +465,6 @@ public class FeedCanvas extends Canvas {
 
 
     void likePost() {
-        // Нажатие центральной кнопки (ОК) - Лайк
         JSONObject post = (JSONObject) posts.get(selectedIndex);
         boolean isLiked = post.getBoolean("isLiked");
         isLiked = !isLiked;
@@ -478,7 +490,6 @@ public class FeedCanvas extends Canvas {
             int nextPostHeight = ((Integer) postsHeights.elementAt(selectedIndex + 1)).intValue();
 
             // Логика "умного" скролла вниз
-//                if (scrolledHeight + selectedPostHeight + nextPostHeight > scrollY + screenHeight) {
             if (selectedPostHeight > screenHeight) { // если текущий пост выше чем экран
                 if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) { // если самый конец поста
                     if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
@@ -534,7 +545,6 @@ public class FeedCanvas extends Canvas {
             int prevPostHeight = ((Integer) postsHeights.elementAt(selectedIndex - 1)).intValue();
 
             // Логика "умного" скролла вверх
-//                if (scrolledHeight < scrollY) {
             if (selectedPostHeight > screenHeight) {
                 if (scrollY == scrolledHeight) {
                     if (prevPostHeight > screenHeight) {
@@ -650,8 +660,8 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void renderPostContent(Graphics g, JSONObject post, int currentY,
-                                   String[] content, Hashtable mediaHeights, int offset, int postIndex) {
+    void drawPostContent(Graphics g, JSONObject post, int currentY,
+                         String[] content, Hashtable mediaHeights, int offset) {
         // Рисуем аватарку
         String emoji = post.getObject("author").getString("avatar");
         String emojiId = getEmojiId(emoji);
@@ -718,12 +728,13 @@ public class FeedCanvas extends Canvas {
         //прикреплённые медиа
         JSONArray attachments = post.getArray("attachments");
         if (!attachments.isEmpty()) {
+            String postId = post.getString("id");
+
             for (int mediaIndex = 0; mediaIndex < attachments.size(); mediaIndex++) {
                 JSONObject mediaInfo = attachments.getObject(mediaIndex);
 
                 String url = mediaInfo.getString("url");
                 String fileName = ITD.getFileName(url);
-//                ITD.log(fileName);
 
                 if (medias.containsKey(fileName)) {
                     Image media = (Image) medias.get(fileName);
@@ -743,7 +754,7 @@ public class FeedCanvas extends Canvas {
 
                         mediaRequest.addElement(fileName);
                         mediaRequest.addElement(new Integer(offset));
-                        mediaRequest.addElement(new Integer(postIndex));
+                        mediaRequest.addElement(postId);
 
                         mediasQueue.addElement(mediaRequest);
                         mediasQueue.notify();
