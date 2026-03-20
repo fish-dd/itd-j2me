@@ -393,17 +393,20 @@ public class ITD extends MIDlet {
 
         Runnable getPostsRunnable = new Runnable() {
             public void run() {
-                startForm.append("Получение постов...\n");
-                String postsResponse = getRequest(url,  refreshToken);
+                try {
+                    startForm.append("Получение постов...\n");
+                    String postsResponse = getRequest(url, refreshToken);
 
-                startForm.append("Парсинг JSON...\n");
-                JSONObject json = JSON.getObject(postsResponse);
-                JSONArray posts = json.getObject("data").getArray("posts");
+                    startForm.append("Парсинг JSON...\n");
+                    JSONObject json = JSON.getObject(postsResponse);
+                    JSONArray posts = json.getObject("data").getArray("posts");
 
-                startForm.append("Иницализация экрана фида...\n");
-                FeedCanvas feedCanvas = new FeedCanvas(posts, midlet);
-                loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                display.setCurrent(feedCanvas);
+                    startForm.append("Иницализация экрана фида...\n");
+                    FeedCanvas feedCanvas = new FeedCanvas(posts, midlet);
+                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
+                    display.setCurrent(feedCanvas);
+                }
+                catch (Exception ignored) {startForm.append("Произошла ошибка");}
             }
         };
         startForm.append("Запуск потока...\n");

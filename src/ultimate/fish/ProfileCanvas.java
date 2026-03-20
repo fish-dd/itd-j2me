@@ -1,6 +1,5 @@
 package ultimate.fish;
 
-import cc.nnproject.json.AbstractJSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
@@ -16,19 +15,20 @@ public class ProfileCanvas extends FeedCanvas {
 
     public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
         super(posts, midlet);
-
-        this.posts = posts;
         this.profile = profile;
 
-        Vector tempPostsHeights = new Vector();
-        tempPostsHeights.addElement(new Integer(headerHeight));
-        for (int i = 0; i < postsHeights.size(); i++) {
-            tempPostsHeights.addElement(postsHeights.elementAt(i));
+        JSONObject header = new JSONObject();
+        header.put("id", "header");
+
+        elements = new Vector();
+        elements.addElement(new JSONObject());
+        for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
+            elements.addElement(posts.get(postIndex));
         }
-        postsHeights = tempPostsHeights;
 
         bannerHeight = screenWidth / 3;
         headerHeight = PADDING*4 + AVATAR_SIZE + lineHeight*2 + bannerHeight;
+        postsHeights.put("header", new Integer(headerHeight));
     }
 
 
@@ -40,22 +40,24 @@ public class ProfileCanvas extends FeedCanvas {
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
 
-        if (selectedIndex == 0) { //мне слишком лень делать нормальную логику скролла, текущая писалась кровью и потом
-            drawProfileHeader(g, currentY);
-            currentY += headerHeight; //пусть если шапка не в фокусе, то она не показывается вообще
-        }
+        drawProfileHeader(g, currentY, selectedIndex == 0);
+        currentY += headerHeight;
 
-        for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
-            JSONObject post = (JSONObject) posts.get(postIndex);
-            drawPost(g, currentY, post, postIndex, postIndex == selectedIndex);
-            currentY += ((Integer) postsHeights.elementAt(postIndex)).intValue();
+        for (int postIndex = 1; postIndex < elements.size(); postIndex++) {
+            JSONObject element = (JSONObject) elements.elementAt(postIndex);
+            boolean isSelected = selectedIndex == postIndex;
+
+            drawPost(g, currentY, element, isSelected);
+
+            if (isSelected) selectedY = currentY;
+            currentY += ((Integer) postsHeights.get(element.getString("id"))).intValue();
         }
     }
 
 
-    private void drawProfileHeader(Graphics g, int currentY) {
+    private void drawProfileHeader(Graphics g, int currentY, boolean isSelected) {
         if (currentY + headerHeight > 0) {
-            if (selectedIndex == 0) {
+            if (isSelected) {
                 g.setColor(COLOR_SEL);
                 g.fillRect(0, currentY, screenWidth, headerHeight);
             }
@@ -123,21 +125,23 @@ public class ProfileCanvas extends FeedCanvas {
     protected void keyPressed(int keyCode) { //обработка нажатий клавиш
         int action = getGameAction(keyCode);
 
-        int selectedPostHeight = ((Integer) postsHeights.elementAt(selectedIndex)).intValue();
-        int scrolledHeight = ITD.sum(postsHeights, 0, selectedIndex);
+        int selectedPostHeight = selectedIndex == 0 ? headerHeight : getPostHeight((JSONObject) elements.elementAt(selectedIndex));
+        int scrolledHeight = selectedY - 1 + selectedPostHeight;
 
         if (action == UP) {
             onUp(selectedPostHeight, scrolledHeight);
         }
         else if (action == DOWN) {
-            onDown(selectedPostHeight, scrolledHeight, posts.size() + 1);
-        }
-        else if (action == FIRE) {
-            likePost();
+            onDown(selectedPostHeight, scrolledHeight, elements.size());
         }
 
         // Обязательно вызываем перерисовку после изменений!
         ITD.log(scrollY);
         repaint();
+    }
+
+
+    void likePost() {
+        if (selectedIndex != 0) super.likePost();
     }
 }
