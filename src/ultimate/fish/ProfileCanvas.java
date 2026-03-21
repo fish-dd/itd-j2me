@@ -10,6 +10,10 @@ import java.util.Vector;
 public class ProfileCanvas extends FeedCanvas {
     private JSONObject profile;
 
+    static final int COLOR_BANNER = 0x323232;
+
+    private Image calendarIcon;
+
     private int bannerHeight;
     private final String HEADER_ID = "header";
 
@@ -17,6 +21,10 @@ public class ProfileCanvas extends FeedCanvas {
     public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
         super(posts, midlet);
         this.profile = profile;
+
+        try {
+            calendarIcon = ITD.getPNGRes("calendar");
+        } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         bannerHeight = screenWidth / 3;
         headerHeight = PADDING*4 + AVATAR_SIZE + lineHeight*2 + bannerHeight;
@@ -63,12 +71,37 @@ public class ProfileCanvas extends FeedCanvas {
                 g.fillRect(0, currentY, screenWidth, headerHeight);
             }
 
-            g.setColor(COLOR_TEXT);
-            g.fillRect(0, currentY, screenWidth, bannerHeight);
+            //баннер
+            String bannerUrl = profile.getString("banner");
+            if (bannerUrl != null) {
+                String fileName = ITD.getFileName(bannerUrl);
 
-            g.setColor(COLOR_BG);
-            g.setFont(fontBold);
-            g.drawString("Заготовка", 0, currentY, Graphics.TOP | Graphics.LEFT);
+                if (medias.containsKey("banner")) {
+                    Image banner = (Image) medias.get("banner");
+                    g.drawImage(banner, 0, currentY, Graphics.TOP | Graphics.LEFT);
+                }
+                else {
+                    synchronized (mediasQueue) {
+                        Vector mediaRequest = new Vector();
+
+                        mediaRequest.addElement(fileName);
+                        mediaRequest.addElement(new Integer(BANNER));
+                        mediaRequest.addElement(HEADER_ID);
+
+                        mediasQueue.addElement(mediaRequest);
+                        mediasQueue.notify();
+                    }
+                }
+            }
+            else {
+                g.setColor(COLOR_BANNER);
+                g.fillRect(0, currentY, screenWidth, bannerHeight);
+            }
+
+            if (isSelected) {
+                g.setColor(COLOR_SEL);
+                g.drawRect(0, currentY, screenWidth-1, bannerHeight);
+            }
 
             int userDataY = currentY + PADDING + bannerHeight;
 
@@ -112,10 +145,59 @@ public class ProfileCanvas extends FeedCanvas {
                 );
             }
 
+            //юзернейм
+            String username = profile.getString("username");
+            g.drawString(
+                    "@"+username,
+                    PADDING * 2 + AVATAR_SIZE,
+                    userDataY + lineHeight + PADDING - 2,
+                    Graphics.TOP | Graphics.LEFT
+            );
+
+            //подписчики
+            String followersString = profile.getString("followersCount") + " подписчиков";
+            g.setFont(fontPlain);
+            g.drawString(
+                    followersString,
+                    PADDING,
+                    userDataY + PADDING + AVATAR_SIZE,
+                    Graphics.TOP | Graphics.LEFT
+            );
+            int followersWidth = strWidth(followersString, fontPlain);
+
+            //подписки
+            String followingString = profile.getString("followingCount") + " подписок";
+            g.setFont(fontPlain);
+            g.drawString(
+                    followingString,
+                    PADDING*3 + followersWidth,
+                    userDataY + PADDING + AVATAR_SIZE,
+                    Graphics.TOP | Graphics.LEFT
+            );
+
+            //дата регистрации
+            String createdAt = profile.getString("createdAt");
+            String year = createdAt.substring(0, createdAt.indexOf('-'));
+            String month = createdAt.substring(createdAt.indexOf('-')+1, createdAt.indexOf('-', createdAt.indexOf('-')+1));
+            String regDate = year + "." + month;
+            g.drawImage(
+                    calendarIcon,
+                    PADDING,
+                    userDataY + PADDING*2 + AVATAR_SIZE + lineHeight,
+                    Graphics.TOP | Graphics.LEFT
+            );
+            g.setFont(fontPlain);
+            g.drawString(
+                    regDate,
+                    PADDING*2 + ICON_SIZE,
+                    userDataY + PADDING*2 + AVATAR_SIZE + lineHeight,
+                    Graphics.TOP | Graphics.LEFT
+            );
+
             //плейсхолдеры
-            g.fillRect(PADDING*2+AVATAR_SIZE, currentY+bannerHeight+PADDING*2-2+lineHeight, 100, lineHeight);
-            g.fillRect(PADDING, currentY+bannerHeight+PADDING*2+AVATAR_SIZE, 175, lineHeight);
-            g.fillRect(PADDING, currentY+bannerHeight+PADDING*3+AVATAR_SIZE+lineHeight, 125, lineHeight);
+//            g.fillRect(PADDING*2+AVATAR_SIZE, currentY+bannerHeight+PADDING*2-2+lineHeight, 100, lineHeight);
+//            g.fillRect(PADDING, userDataY+PADDING+AVATAR_SIZE, 175, lineHeight);
+//            g.fillRect(PADDING, userDataY+PADDING*2+AVATAR_SIZE+lineHeight, 125, lineHeight);
 
             // Разделительная линия
             g.setColor(COLOR_SEL);

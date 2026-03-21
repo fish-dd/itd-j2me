@@ -82,11 +82,11 @@ public class ITD extends MIDlet {
         display.setCurrent(startForm);
 
         try {
-            feedIcon = getIconRes("home");
-            searchIcon = getIconRes("search");
-            notificationsIcon = getIconRes("notifications");
-            profileIcon = getIconRes("account");
-            settingsIcon = getIconRes("settings");
+            feedIcon = getPNGRes("home");
+            searchIcon = getPNGRes("search");
+            notificationsIcon = getPNGRes("notifications");
+            profileIcon = getPNGRes("account");
+            settingsIcon = getPNGRes("settings");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
         menuIcons = new Image[]{feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
 
@@ -164,6 +164,9 @@ public class ITD extends MIDlet {
                     }
                     else if (menuList.isSelected(4)) {
                         initSettingsForm();
+                    }
+                    else {
+                        display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
                     }
                 }
             }
@@ -454,7 +457,7 @@ public class ITD extends MIDlet {
         Form settingsForm = new Form("Настройки");
         settingsForm.setCommandListener(settingsCmdListener);
         settingsForm.addCommand(backToMenuCmd);
-        settingsForm.append("Тут будут настройки");
+        settingsForm.append("Тут будут настройки\n");
         loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(settingsForm);
     }
@@ -474,7 +477,7 @@ public class ITD extends MIDlet {
         aboutForm.append("by ultimate_fish\n");
 
         Image logoImg = null;
-        try { logoImg = getIconRes("itd"); } catch (IOException ignored) {}
+        try { logoImg = getPNGRes("itd"); } catch (IOException ignored) {}
         ImageItem logo = new ImageItem(null, logoImg, Item.LAYOUT_CENTER, "Логотип");
         aboutForm.append(logo);
 
@@ -531,7 +534,7 @@ public class ITD extends MIDlet {
     }
 
 
-    public static Image getIconRes(String path) throws IOException {
+    public static Image getPNGRes(String path) throws IOException {
         return Image.createImage(Class.class.getResourceAsStream("/" + path + ".png"));
     }
 

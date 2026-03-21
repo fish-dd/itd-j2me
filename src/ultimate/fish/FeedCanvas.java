@@ -67,6 +67,10 @@ public class FeedCanvas extends Canvas {
 
     int headerHeight = 0;
 
+    static final int POST = 0;
+    static final int REPOST = 1;
+    static final int BANNER = 2;
+
 
     public FeedCanvas(JSONArray posts, ITD midlet) {
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
@@ -108,19 +112,19 @@ public class FeedCanvas extends Canvas {
 
     void initIcons() {
         try {
-            likeIcon = ITD.getIconRes("like");
-            likeFillIcon = ITD.getIconRes("like_fill");
-            commentIcon = ITD.getIconRes("comment");
-            viewIcon = ITD.getIconRes("view");
-            repostIcon = ITD.getIconRes("repost");
-            verifiedIcon = ITD.getIconRes("verified");
+            likeIcon = ITD.getPNGRes("like");
+            likeFillIcon = ITD.getPNGRes("like_fill");
+            commentIcon = ITD.getPNGRes("comment");
+            viewIcon = ITD.getPNGRes("view");
+            repostIcon = ITD.getPNGRes("repost");
+            verifiedIcon = ITD.getPNGRes("verified");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
     }
 
 
     int getPostHeight(JSONObject post) {
         String postId = post.getString("id");
-        ITD.log("getPostHeight(" + postId + ")");
+//        ITD.log("getPostHeight(" + postId + ")");
 
         if (postsHeights.containsKey(postId)) {
             return ((Integer) postsHeights.get(postId)).intValue();
@@ -207,37 +211,54 @@ public class FeedCanvas extends Canvas {
 
                     Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
                     String fileName = (String) mediaRequest.elementAt(0);
-                    boolean isRepost = ((Boolean) mediaRequest.elementAt(1)).booleanValue();
+                    int type = ((Integer) mediaRequest.elementAt(1)).intValue();
                     String postId = (String) mediaRequest.elementAt(2);
 
-                    int mediaWidth = isRepost ? repostMediaWidth : postMediaWidth;
-                    String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
+                    if (type == POST || type == REPOST) {
+                        int mediaWidth = type == REPOST ? repostMediaWidth : postMediaWidth;
 
-                    Hashtable heightsCache = isRepost ? repostsMediaHeights : postsHeights;
-                    InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
-                    Image media;
-                    try {
-                        media = Image.createImage(mediaRaw);
+                        Image media;
+                        try {
+                            String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
+                            InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
+                            media = Image.createImage(mediaRaw);
 
-                        int mediaHeight = ((Integer) heightsCache.get(fileName)).intValue();
-                        if (media.getHeight() != mediaHeight) {
-                            ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
-                            heightsCache.put(fileName, new Integer(media.getHeight()));
+                            Hashtable heightsCache = type == REPOST ? repostsMediaHeights : postsHeights;
+                            int mediaHeight = ((Integer) heightsCache.get(fileName)).intValue();
+                            if (media.getHeight() != mediaHeight) {
+                                ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
+                                heightsCache.put(fileName, new Integer(media.getHeight()));
 
-                            Integer newPostHeight = new Integer(((Integer) postsHeights.get(postId)).intValue() + media.getHeight() - mediaHeight);
-                            postsHeights.put(postId, newPostHeight);
+                                Integer newPostHeight = new Integer(((Integer) postsHeights.get(postId)).intValue() + media.getHeight() - mediaHeight);
+                                postsHeights.put(postId, newPostHeight);
 
-                            repaint();
-                            return;
+                                repaint();
+                                return;
+                            }
                         }
-                    }
-                    catch (Exception e) {
-                        ITD.log("Ошибка создания медиа " + e);
-                        media = Image.createImage(mediaWidth, 100);
-                    }
+                        catch (Exception e) {
+                            ITD.log("Ошибка создания медиа " + e);
+                            media = Image.createImage(mediaWidth, 100);
+                        }
 
-                    medias.put(fileName, media);
-                    mediasQueue.removeElementAt(0);
+                        medias.put(fileName, media);
+                        mediasQueue.removeElementAt(0);
+                    }
+                    else if (type == BANNER) {
+                        String bannerUrl = ITD.URL + "/banner/" + fileName + "?width=" + screenWidth;
+
+                        Image banner;
+                        try {
+                            InputStream bannerRaw = ITD.rawGetRequest(bannerUrl);
+                            banner = Image.createImage(bannerRaw);
+                        } catch (Exception e) {
+                            ITD.log("Ошибка создания баннера " + e);
+                            banner = Image.createImage(screenWidth, 100);
+                        }
+
+                        medias.put("banner", banner);
+                        mediasQueue.removeElementAt(0);
+                    }
 
                     repaint();
                 }
@@ -334,21 +355,21 @@ public class FeedCanvas extends Canvas {
             if (repost != null) {
                 String repostId = repost.getString("id");
 
-                int repostY = currentY + PADDING * 3 + AVATAR_SIZE + lineHeight * content.length + 1;
+                int repostY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight*content.length + 1;
                 g.drawRect( //рамка репоста
-                        PADDING + 1,
+                        PADDING,
                         repostY,
-                        postMediaWidth - 2,
-                        postHeight - repostY - PADDING - ICON_SIZE
+                        postMediaWidth,
+                        postHeight - (repostY - currentY) - PADDING*2 - ICON_SIZE
                 );
-                int repostWidth = screenWidth - PADDING * 4 - 2;
+                int repostContentWidth = screenWidth - PADDING * 4 - 2;
 
                 String[] repostContent;
                 if (repostsStrings.contains(repostId)) {
                     repostContent = (String[]) postsStrings.get(repostId);
                 }
                 else {
-                    repostContent = split(repost.getString("content"), fontPlain, repostWidth);
+                    repostContent = split(repost.getString("content"), fontPlain, repostContentWidth);
                     repostsStrings.put(repostId, content);
                 }
 
@@ -460,7 +481,7 @@ public class FeedCanvas extends Canvas {
                         Vector mediaRequest = new Vector();
 
                         mediaRequest.addElement(fileName);
-                        mediaRequest.addElement(isRepost ? Boolean.TRUE : Boolean.FALSE);
+                        mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
                         mediaRequest.addElement(postId);
 
                         mediasQueue.addElement(mediaRequest);
@@ -552,7 +573,7 @@ public class FeedCanvas extends Canvas {
 
         int selectedPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex));
         int scrolledHeight = scrollY + selectedY;
-        ITD.log("ПРОСКРОЛЛЕНАЯ ВЫСОТА " + scrolledHeight);
+//        ITD.log("ПРОСКРОЛЛЕНАЯ ВЫСОТА " + scrolledHeight);
 //        int otherScrolledHeight = 0;
 //        for (int postIndex = 0; postIndex < selectedIndex; postIndex++) {
 //            otherScrolledHeight += getPostHeight((JSONObject) elements.elementAt(postIndex));
