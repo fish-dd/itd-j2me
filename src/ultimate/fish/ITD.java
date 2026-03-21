@@ -275,7 +275,7 @@ public class ITD extends MIDlet {
 
             OutputStream outputStream = connection.openOutputStream();
 
-            outputStream.write(data);
+            outputStream.write(data != null ? data : new byte[] {});
             outputStream.flush();
 
             int code = connection.getResponseCode();

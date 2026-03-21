@@ -179,7 +179,7 @@ public class ProfileCanvas extends FeedCanvas {
             String createdAt = profile.getString("createdAt");
             String year = createdAt.substring(0, createdAt.indexOf('-'));
             String month = createdAt.substring(createdAt.indexOf('-')+1, createdAt.indexOf('-', createdAt.indexOf('-')+1));
-            String regDate = year + "." + month;
+            String regDate = numToMonth(month) + " " + year;
             g.drawImage(
                     calendarIcon,
                     PADDING,
@@ -203,6 +203,13 @@ public class ProfileCanvas extends FeedCanvas {
             g.setColor(COLOR_SEL);
             g.drawLine(0, currentY + headerHeight - 1, screenWidth, currentY + headerHeight - 1);
         }
+    }
+
+    private String numToMonth(String monthStr) {
+        String[] months = {"Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+                            "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"};
+        int month = Integer.parseInt(monthStr);
+        return months[month - 1];
     }
 
 

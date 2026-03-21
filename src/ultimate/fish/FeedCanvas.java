@@ -17,6 +17,8 @@ public class FeedCanvas extends Canvas {
     Hashtable postsHeights = new Hashtable(); //высоты постов и отдельных медиа постов
     Hashtable repostsMediaHeights = new Hashtable(); //высоты репостов и отдельных медиа репостов
 
+    Vector viewedPosts = new Vector();
+
     Hashtable avatars = new Hashtable();
     Vector avatarsQueue = new Vector();
     Thread avatarLoader;
@@ -326,7 +328,7 @@ public class FeedCanvas extends Canvas {
 
 
     void drawPost(Graphics g, int currentY, JSONObject post, boolean isSelected) {
-        String id = post.getString("id");
+        final String id = post.getString("id");
 
         String[] content;
         if (postsStrings.contains(id)) {
@@ -345,6 +347,20 @@ public class FeedCanvas extends Canvas {
             if (isSelected) {
                 g.setColor(COLOR_SEL);
                 g.fillRect(0, currentY, screenWidth, postHeight);
+
+                if (!viewedPosts.contains(id)) {
+                    ITD.log("Отправка просмотра " + id);
+                    viewedPosts.addElement(id);
+                    new Thread(new Runnable() {
+                        public void run() {
+                            ITD.postRequest(
+                                    ITD.API_URL + "/posts/" + id + "/view",
+                                    null,
+                                    midlet.getRefreshToken()
+                            );
+                        }
+                    }).start();
+                }
             }
 
             //содержимое поста
