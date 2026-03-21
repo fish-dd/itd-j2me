@@ -11,24 +11,25 @@ public class ProfileCanvas extends FeedCanvas {
     private JSONObject profile;
 
     private int bannerHeight;
+    private final String HEADER_ID = "header";
 
 
     public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
         super(posts, midlet);
         this.profile = profile;
 
+        bannerHeight = screenWidth / 3;
+        headerHeight = PADDING*4 + AVATAR_SIZE + lineHeight*2 + bannerHeight;
+        postsHeights.put(HEADER_ID, new Integer(headerHeight));
+
         JSONObject header = new JSONObject();
-        header.put("id", "header");
+        header.put("id", HEADER_ID);
 
         elements = new Vector();
-        elements.addElement(new JSONObject());
+        elements.addElement(header);
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
         }
-
-        bannerHeight = screenWidth / 3;
-        headerHeight = PADDING*4 + AVATAR_SIZE + lineHeight*2 + bannerHeight;
-        postsHeights.put("header", new Integer(headerHeight));
     }
 
 
@@ -46,10 +47,10 @@ public class ProfileCanvas extends FeedCanvas {
         for (int postIndex = 1; postIndex < elements.size(); postIndex++) {
             JSONObject element = (JSONObject) elements.elementAt(postIndex);
             boolean isSelected = selectedIndex == postIndex;
+            if (isSelected) selectedY = currentY;
 
             drawPost(g, currentY, element, isSelected);
 
-            if (isSelected) selectedY = currentY;
             currentY += ((Integer) postsHeights.get(element.getString("id"))).intValue();
         }
     }
@@ -111,6 +112,7 @@ public class ProfileCanvas extends FeedCanvas {
                 );
             }
 
+            //плейсхолдеры
             g.fillRect(PADDING*2+AVATAR_SIZE, currentY+bannerHeight+PADDING*2-2+lineHeight, 100, lineHeight);
             g.fillRect(PADDING, currentY+bannerHeight+PADDING*2+AVATAR_SIZE, 175, lineHeight);
             g.fillRect(PADDING, currentY+bannerHeight+PADDING*3+AVATAR_SIZE+lineHeight, 125, lineHeight);
@@ -119,25 +121,6 @@ public class ProfileCanvas extends FeedCanvas {
             g.setColor(COLOR_SEL);
             g.drawLine(0, currentY + headerHeight - 1, screenWidth, currentY + headerHeight - 1);
         }
-    }
-
-
-    protected void keyPressed(int keyCode) { //обработка нажатий клавиш
-        int action = getGameAction(keyCode);
-
-        int selectedPostHeight = selectedIndex == 0 ? headerHeight : getPostHeight((JSONObject) elements.elementAt(selectedIndex));
-        int scrolledHeight = selectedY - 1 + selectedPostHeight;
-
-        if (action == UP) {
-            onUp(selectedPostHeight, scrolledHeight);
-        }
-        else if (action == DOWN) {
-            onDown(selectedPostHeight, scrolledHeight, elements.size());
-        }
-
-        // Обязательно вызываем перерисовку после изменений!
-        ITD.log(scrollY);
-        repaint();
     }
 
 

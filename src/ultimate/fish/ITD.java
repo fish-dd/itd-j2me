@@ -316,16 +316,17 @@ public class ITD extends MIDlet {
 
 
     static void log(Object object) {
-        if (!ITD.DEBUG) return;
-
-        System.out.println(object);
+        if (ITD.DEBUG) System.out.println(object);
     }
 
 
     static void log(int integer) {
-        if (!ITD.DEBUG) return;
+        if (!ITD.DEBUG) System.out.println(integer);
+    }
 
-        System.out.println(integer);
+
+    static void log(boolean bool) {
+        if (!ITD.DEBUG) System.out.println(bool);
     }
 
 

@@ -67,6 +67,7 @@ public class FeedCanvas extends Canvas {
 
     int headerHeight = 0;
 
+
     public FeedCanvas(JSONArray posts, ITD midlet) {
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
@@ -119,8 +120,9 @@ public class FeedCanvas extends Canvas {
 
     int getPostHeight(JSONObject post) {
         String postId = post.getString("id");
+        ITD.log("getPostHeight(" + postId + ")");
 
-        if (postsHeights.contains(postId)) {
+        if (postsHeights.containsKey(postId)) {
             return ((Integer) postsHeights.get(postId)).intValue();
         }
 
@@ -208,10 +210,10 @@ public class FeedCanvas extends Canvas {
                     boolean isRepost = ((Boolean) mediaRequest.elementAt(1)).booleanValue();
                     String postId = (String) mediaRequest.elementAt(2);
 
-                    int mediaWidth = isRepost ? postMediaWidth : repostMediaWidth;
+                    int mediaWidth = isRepost ? repostMediaWidth : postMediaWidth;
                     String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
 
-                    Hashtable heightsCache = isRepost ? postsHeights : repostsMediaHeights;
+                    Hashtable heightsCache = isRepost ? repostsMediaHeights : postsHeights;
                     InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
                     Image media;
                     try {
@@ -293,13 +295,10 @@ public class FeedCanvas extends Canvas {
         for (int postIndex = 0; postIndex < elements.size(); postIndex++) {
             JSONObject post = (JSONObject) elements.elementAt(postIndex);
             boolean isSelected = selectedIndex == postIndex;
+            if (isSelected) selectedY = currentY;
 
             drawPost(g, currentY, post, isSelected);
-            if (isSelected) {
-                selectedY = currentY;
-            }
             // Сдвигаем курсор рисования вниз
-            ITD.log((Integer) postsHeights.get(post.getString("id")));
             currentY += ((Integer) postsHeights.get(post.getString("id"))).intValue();
         }
     }
@@ -336,7 +335,7 @@ public class FeedCanvas extends Canvas {
                 String repostId = repost.getString("id");
 
                 int repostY = currentY + PADDING * 3 + AVATAR_SIZE + lineHeight * content.length + 1;
-                g.drawRect(
+                g.drawRect( //рамка репоста
                         PADDING + 1,
                         repostY,
                         postMediaWidth - 2,
@@ -362,6 +361,113 @@ public class FeedCanvas extends Canvas {
             // Разделительная линия
             g.setColor(COLOR_SEL);
             g.drawLine(0, currentY + postHeight - 1, screenWidth, currentY + postHeight - 1);
+        }
+    }
+
+
+    void drawPostContent(Graphics g, int currentY, JSONObject post,
+                         String[] content, Hashtable mediaHeights, boolean isRepost) {
+        int offset = isRepost ? PADDING+1 : 0;
+
+        // Рисуем аватарку
+        String emoji = post.getObject("author").getString("avatar");
+        String emojiId = getEmojiId(emoji);
+
+        if (avatars.containsKey(emojiId)) {
+            Image avatar = (Image) avatars.get(emojiId);
+            g.drawImage(avatar, PADDING + offset, currentY + PADDING, 0);
+        }
+        else {
+            synchronized (avatarsQueue) {
+                avatarsQueue.addElement(emojiId);
+                avatarsQueue.notify();
+            }
+        }
+
+        // Рисуем Имя автора
+        String displayName = post.getObject("author").getString("displayName");
+        g.setFont(fontBold);
+        g.setColor(COLOR_TEXT);
+        int userDataY = currentY + PADDING;
+        g.drawString(
+                displayName,
+                PADDING * 2 + AVATAR_SIZE + offset,
+                userDataY,
+                Graphics.TOP | Graphics.LEFT
+        );
+        int nameWidth = strWidth(displayName, fontPlain);
+
+        //галочка
+        boolean isVerified = post.getObject("author").getBoolean("verified");
+        if (isVerified) {
+            int verifiedX = Math.min(PADDING * 3 + AVATAR_SIZE + nameWidth, screenWidth - ICON_SIZE - PADDING);
+            g.drawImage(
+                    verifiedIcon,
+                    verifiedX + offset,
+                    userDataY,
+                    Graphics.TOP | Graphics.LEFT
+            );
+        }
+
+        //время публикации
+        int createdAt = post.getInt("createdAt");
+        g.setFont(fontBold);
+        g.setColor(COLOR_TEXT);
+        g.drawString(
+                createdAt + " секунд назад",
+                PADDING * 2 + AVATAR_SIZE + offset,
+                currentY + PADDING*2 + lineHeight - 2,
+                Graphics.TOP | Graphics.LEFT
+        );
+
+        // Рисуем Текст поста
+        g.setFont(fontPlain);
+        g.setColor(COLOR_TEXT);
+        for (int j = 0; j < content.length; j++) {
+            g.drawString(
+                    content[j],
+                    PADDING + offset,
+                    currentY + PADDING*2 + AVATAR_SIZE + lineHeight*j,
+                    Graphics.TOP | Graphics.LEFT
+            );
+        }
+
+        //прикреплённые медиа
+        JSONArray attachments = post.getArray("attachments");
+        if (!attachments.isEmpty()) {
+            String postId = post.getString("id");
+
+            for (int mediaIndex = 0; mediaIndex < attachments.size(); mediaIndex++) {
+                JSONObject mediaInfo = attachments.getObject(mediaIndex);
+
+                String url = mediaInfo.getString("url");
+                String fileName = ITD.getFileName(url);
+
+                if (medias.containsKey(fileName)) {
+                    Image media = (Image) medias.get(fileName);
+                    int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
+
+                    g.drawImage(
+                            media,
+                            PADDING + offset,
+                            currentY + PADDING*(3+mediaIndex) + AVATAR_SIZE +
+                                    lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex),
+                            0
+                    );
+                }
+                else {
+                    synchronized (mediasQueue) {
+                        Vector mediaRequest = new Vector();
+
+                        mediaRequest.addElement(fileName);
+                        mediaRequest.addElement(isRepost ? Boolean.TRUE : Boolean.FALSE);
+                        mediaRequest.addElement(postId);
+
+                        mediasQueue.addElement(mediaRequest);
+                        mediasQueue.notify();
+                    }
+                }
+            }
         }
     }
 
@@ -421,7 +527,6 @@ public class FeedCanvas extends Canvas {
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );
-//                int repostsWidth = ICON_SIZE + PADDING + strWidth(repostStr, fontPlain);
 
         //просмотры
         int viewsCount = post.getInt("viewsCount");
@@ -446,8 +551,13 @@ public class FeedCanvas extends Canvas {
         int action = getGameAction(keyCode);
 
         int selectedPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex));
-        int scrolledHeight = selectedY - 1 + selectedPostHeight;
+        int scrolledHeight = scrollY + selectedY;
         ITD.log("ПРОСКРОЛЛЕНАЯ ВЫСОТА " + scrolledHeight);
+//        int otherScrolledHeight = 0;
+//        for (int postIndex = 0; postIndex < selectedIndex; postIndex++) {
+//            otherScrolledHeight += getPostHeight((JSONObject) elements.elementAt(postIndex));
+//        }
+//        ITD.log("REAL SHIT ПРОСКРОЛЛЕНАЯ ВЫСОТА " + otherScrolledHeight);
 
         if (action == UP) {
             onUp(selectedPostHeight, scrolledHeight);
@@ -455,9 +565,6 @@ public class FeedCanvas extends Canvas {
         else if (action == DOWN) {
             onDown(selectedPostHeight, scrolledHeight, elements.size());
         }
-//        else if (action == FIRE) {
-//            likePost();
-//        }
 
         // Обязательно вызываем перерисовку после изменений!
         ITD.log(scrollY);
@@ -656,113 +763,6 @@ public class FeedCanvas extends Canvas {
 
     static int strWidth(String str, Font font) {
         return font.charsWidth(str.toCharArray(), 0, str.length());
-    }
-
-
-    void drawPostContent(Graphics g, int currentY, JSONObject post,
-                         String[] content, Hashtable mediaHeights, boolean isRepost) {
-        int offset = isRepost ? PADDING+1 : 0;
-
-        // Рисуем аватарку
-        String emoji = post.getObject("author").getString("avatar");
-        String emojiId = getEmojiId(emoji);
-
-        if (avatars.containsKey(emojiId)) {
-            Image avatar = (Image) avatars.get(emojiId);
-            g.drawImage(avatar, PADDING + offset, currentY + PADDING, 0);
-        }
-        else {
-            synchronized (avatarsQueue) {
-                avatarsQueue.addElement(emojiId);
-                avatarsQueue.notify();
-            }
-        }
-
-        // Рисуем Имя автора
-        String displayName = post.getObject("author").getString("displayName");
-        g.setFont(fontBold);
-        g.setColor(COLOR_TEXT);
-        int userDataY = currentY + PADDING;
-        g.drawString(
-                displayName,
-                PADDING * 2 + AVATAR_SIZE + offset,
-                userDataY,
-                Graphics.TOP | Graphics.LEFT
-        );
-        int nameWidth = strWidth(displayName, fontPlain);
-
-        //галочка
-        boolean isVerified = post.getObject("author").getBoolean("verified");
-        if (isVerified) {
-            int verifiedX = Math.min(PADDING * 3 + AVATAR_SIZE + nameWidth, screenWidth - ICON_SIZE - PADDING);
-            g.drawImage(
-                    verifiedIcon,
-                    verifiedX + offset,
-                    userDataY,
-                    Graphics.TOP | Graphics.LEFT
-            );
-        }
-
-        //время публикации
-        int createdAt = post.getInt("createdAt");
-        g.setFont(fontBold);
-        g.setColor(COLOR_TEXT);
-        g.drawString(
-                createdAt + " секунд назад",
-                PADDING * 2 + AVATAR_SIZE + offset,
-                currentY + PADDING*2 + lineHeight - 2,
-                Graphics.TOP | Graphics.LEFT
-        );
-
-        // Рисуем Текст поста
-        g.setFont(fontPlain);
-        g.setColor(COLOR_TEXT);
-        for (int j = 0; j < content.length; j++) {
-            g.drawString(
-                    content[j],
-                    PADDING + offset,
-                    currentY + PADDING*2 + AVATAR_SIZE + lineHeight*j,
-                    Graphics.TOP | Graphics.LEFT
-            );
-        }
-
-        //прикреплённые медиа
-        JSONArray attachments = post.getArray("attachments");
-        if (!attachments.isEmpty()) {
-            String postId = post.getString("id");
-
-            for (int mediaIndex = 0; mediaIndex < attachments.size(); mediaIndex++) {
-                JSONObject mediaInfo = attachments.getObject(mediaIndex);
-
-                String url = mediaInfo.getString("url");
-                String fileName = ITD.getFileName(url);
-
-                if (medias.containsKey(fileName)) {
-                    Image media = (Image) medias.get(fileName);
-                    int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
-
-                    g.drawImage(
-                            media,
-                            PADDING + offset,
-                            currentY + PADDING*(3+mediaIndex) + AVATAR_SIZE +
-                                    lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex),
-                            0
-                    );
-                }
-                else {
-                    synchronized (mediasQueue) {
-                        Vector mediaRequest = new Vector();
-
-                        mediaRequest.addElement(fileName);
-                        mediaRequest.addElement(isRepost ? Boolean.TRUE : Boolean.FALSE);
-                        mediaRequest.addElement(postId);
-
-                        mediasQueue.addElement(mediaRequest);
-                        mediasQueue.notify();
-                    }
-                }
-            }
-        }
     }
 
 
