@@ -4,7 +4,6 @@ import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
 import javax.microedition.lcdui.*;
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Hashtable;
 import java.util.Vector;
@@ -31,10 +30,13 @@ public class FeedCanvas extends Canvas {
 
     // Параметры UI
     int scrollY = 0;         // Смещение прокрутки по вертикали
-    int selectedY;
+    int selectedY = 0;
     int selectedIndex = 0;   // Индекс выбранного поста
     int screenWidth;
     int screenHeight;
+    int avatarSize;
+    int iconSize;
+    int minPostHeight;
 
     // Шрифты
     Font fontBold;
@@ -43,13 +45,10 @@ public class FeedCanvas extends Canvas {
 
     // Константы для верстки
     static final int PADDING = 5;
-    static final int AVATAR_SIZE = 32;
-    static final int ICON_SIZE = 16;
     static final int COLOR_BG = 0x000000;
     static final int COLOR_TEXT = 0xE4E6E8;
     static final int COLOR_SEL = 0x242424;
     static final int COLOR_BLUE = 0x0000FF;
-    static final int MIN_POST_HEIGHT = AVATAR_SIZE + PADDING*2;
     static final float MAX_MEDIA_RATIO = 3f;
 
     static final int SCROLL_HEIGHT = 100;
@@ -81,8 +80,8 @@ public class FeedCanvas extends Canvas {
         this.midlet = midlet;
 
         setFullScreenMode(false);
-        setScreenSize();
         initFonts();
+        setScreenSize();
         initIcons();
 
         initAvatarLoader();
@@ -100,8 +99,18 @@ public class FeedCanvas extends Canvas {
     void setScreenSize() {
         screenWidth = getWidth();
         screenHeight = getHeight();
+
         postMediaWidth = screenWidth - PADDING*2;
         repostMediaWidth = screenWidth - PADDING*4 - 2;
+
+        iconSize = midlet.iconSize;
+        if (lineHeight <= ITD.SIZE_THRESHOLDS[0]) {
+            avatarSize = 32;
+        }
+        else {
+            avatarSize = 64;
+        }
+        minPostHeight = avatarSize + PADDING*2;
     }
 
 
@@ -115,19 +124,18 @@ public class FeedCanvas extends Canvas {
 
     void initIcons() {
         try {
-            likeIcon = ITD.getPNGRes("like");
-            likeFillIcon = ITD.getPNGRes("like_fill");
-            commentIcon = ITD.getPNGRes("comment");
-            viewIcon = ITD.getPNGRes("view");
-            repostIcon = ITD.getPNGRes("repost");
-            verifiedIcon = ITD.getPNGRes("verified");
+            likeIcon = midlet.getIcon("like");
+            likeFillIcon = midlet.getIcon("like_fill");
+            commentIcon = midlet.getIcon("comment");
+            viewIcon = midlet.getIcon("view");
+            repostIcon = midlet.getIcon("repost");
+            verifiedIcon = midlet.getIcon("verified");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
     }
 
 
     int getPostHeight(JSONObject post) {
         String postId = post.getString("id");
-//        ITD.log("getPostHeight(" + postId + ")");
 
         if (postsHeights.containsKey(postId)) {
             return ((Integer) postsHeights.get(postId)).intValue();
@@ -144,11 +152,14 @@ public class FeedCanvas extends Canvas {
         String[] content = split(post.getString("content"), fontPlain, screenWidth - PADDING*2);
 
         //расчёт высоты поста с учётом только главного текста
-        int postHeight = Math.max(PADDING*4 + AVATAR_SIZE + lineHeight * (content.length + 1), MIN_POST_HEIGHT);
+        int postHeight = Math.max(PADDING*3 + avatarSize + lineHeight*content.length + iconSize, minPostHeight);
+        if (content.length != 0) postHeight += PADDING; //отступ после текста
+
+        JSONArray medias = post.getArray("attachments");
+        JSONObject originalPost = post.getObject("originalPost");
 
         //расчёт высоты контента поста (при наличии)
         //если в посте есть фото/медиа
-        JSONArray medias = post.getArray("attachments");
         if (!medias.isEmpty()) {
             for (int mediaIndex = 0; mediaIndex < medias.size(); mediaIndex++) {
                 JSONObject mediaInfo = medias.getObject(mediaIndex);
@@ -165,12 +176,10 @@ public class FeedCanvas extends Canvas {
             ITD.log("Высота поста " + postHeight);
             return postHeight;
         }
-
         //если это репост
-        JSONObject originalPost = post.getObject("originalPost");
-        if (originalPost != null) {
+        else if (originalPost != null) {
             //прибавление к высоте поста высоты заголовка репоста
-            postHeight += PADDING*3 + AVATAR_SIZE + 2;
+            postHeight += PADDING*3 + avatarSize + 2;
 
             //разбиение текста репоста по строкам, прибавление его высоты к высоте поста
             String[] repostContent = split(originalPost.getString("content"), fontPlain, screenWidth - PADDING*4 - 2);
@@ -287,13 +296,16 @@ public class FeedCanvas extends Canvas {
                     }
 
                     String emojiId = (String) avatarsQueue.elementAt(0);
-                    String avatarUrl = ITD.URL + "/avatar/" + emojiId;
+                    String avatarUrl = ITD.URL + "/avatar/" + emojiId + "?size=" + avatarSize;
 
                     InputStream avatarRaw = ITD.rawGetRequest(avatarUrl);
-                    Image avatar = Image.createImage(AVATAR_SIZE, AVATAR_SIZE);
+                    Image avatar;
                     try {
                         avatar = Image.createImage(avatarRaw);
-                    } catch (IOException e) { ITD.log("Ошибка создания аватара " + e); }
+                    } catch (Exception e) {
+                        ITD.log("Ошибка создания аватара " + e);
+                        avatar = Image.createImage(avatarSize, avatarSize);
+                    }
 
                     avatars.put(emojiId, avatar);
                     avatarsQueue.removeElementAt(0);
@@ -371,14 +383,6 @@ public class FeedCanvas extends Canvas {
             JSONObject repost = post.getObject("originalPost");
             if (repost != null) {
                 String repostId = repost.getString("id");
-
-                int repostY = currentY + PADDING*3 + AVATAR_SIZE + lineHeight*content.length + 1;
-                g.drawRect( //рамка репоста
-                        PADDING,
-                        repostY,
-                        postMediaWidth,
-                        postHeight - (repostY - currentY) - PADDING*2 - ICON_SIZE
-                );
                 int repostContentWidth = screenWidth - PADDING * 4 - 2;
 
                 String[] repostContent;
@@ -389,6 +393,15 @@ public class FeedCanvas extends Canvas {
                     repostContent = split(repost.getString("content"), fontPlain, repostContentWidth);
                     repostsStrings.put(repostId, content);
                 }
+
+                int repostY = currentY + PADDING*2 + avatarSize + lineHeight*content.length + 1;
+                if (repostContent.length != 0) repostY += PADDING;
+                g.drawRect( //рамка репоста
+                        PADDING,
+                        repostY,
+                        postMediaWidth,
+                        postHeight - (repostY - currentY) - PADDING*2 - iconSize
+                );
 
                 //содержимое репоста
                 drawPostContent(g, repostY, repost, repostContent, repostsMediaHeights, true);
@@ -429,7 +442,7 @@ public class FeedCanvas extends Canvas {
         int userDataY = currentY + PADDING;
         g.drawString(
                 displayName,
-                PADDING * 2 + AVATAR_SIZE + offset,
+                PADDING * 2 + avatarSize + offset,
                 userDataY,
                 Graphics.TOP | Graphics.LEFT
         );
@@ -438,7 +451,7 @@ public class FeedCanvas extends Canvas {
         //галочка
         boolean isVerified = post.getObject("author").getBoolean("verified");
         if (isVerified) {
-            int verifiedX = Math.min(PADDING * 3 + AVATAR_SIZE + nameWidth, screenWidth - ICON_SIZE - PADDING);
+            int verifiedX = Math.min(PADDING * 3 + avatarSize + nameWidth, screenWidth - iconSize - PADDING);
             g.drawImage(
                     verifiedIcon,
                     verifiedX + offset,
@@ -453,8 +466,8 @@ public class FeedCanvas extends Canvas {
         g.setColor(COLOR_TEXT);
         g.drawString(
                 createdAt + " секунд назад",
-                PADDING * 2 + AVATAR_SIZE + offset,
-                currentY + PADDING*2 + lineHeight - 2,
+                PADDING * 2 + avatarSize + offset,
+                userDataY + avatarSize - lineHeight,
                 Graphics.TOP | Graphics.LEFT
         );
 
@@ -465,7 +478,7 @@ public class FeedCanvas extends Canvas {
             g.drawString(
                     content[j],
                     PADDING + offset,
-                    currentY + PADDING*2 + AVATAR_SIZE + lineHeight*j,
+                    currentY + PADDING*2 + avatarSize + lineHeight*j,
                     Graphics.TOP | Graphics.LEFT
             );
         }
@@ -488,7 +501,7 @@ public class FeedCanvas extends Canvas {
                     g.drawImage(
                             media,
                             PADDING + offset,
-                            currentY + PADDING*(3+mediaIndex) + AVATAR_SIZE +
+                            currentY + PADDING*(3+mediaIndex) + avatarSize +
                                     lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex),
                             0
                     );
@@ -512,7 +525,7 @@ public class FeedCanvas extends Canvas {
 
     private void drawMetadata(Graphics g, int currentY, int postHeight, JSONObject post) {
         //Y координата для всех метаданных внизу поста
-        int metadataY = currentY + postHeight - PADDING - ICON_SIZE;
+        int metadataY = currentY + postHeight - PADDING - iconSize;
         g.setColor(COLOR_TEXT);
 
         // Рисуем Лайки
@@ -527,11 +540,11 @@ public class FeedCanvas extends Canvas {
         String likesStr = String.valueOf(likesCount);
         g.drawString(
                 likesStr,
-                ICON_SIZE + PADDING*2,
+                iconSize + PADDING*2,
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );
-        int likesWidth = ICON_SIZE + PADDING + strWidth(likesStr, fontPlain);
+        int likesWidth = iconSize + PADDING + strWidth(likesStr, fontPlain);
 
         //комменты
         int commentsCount = post.getInt("commentsCount");
@@ -544,11 +557,11 @@ public class FeedCanvas extends Canvas {
         String commentStr = String.valueOf(commentsCount);
         g.drawString(
                 commentStr,
-                ICON_SIZE + PADDING*4 + likesWidth,
+                iconSize + PADDING*4 + likesWidth,
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );
-        int commentsWidth = ICON_SIZE + PADDING + strWidth(commentStr, fontPlain);
+        int commentsWidth = iconSize + PADDING + strWidth(commentStr, fontPlain);
 
         //репосты
         int repostsCount = post.getInt("repostsCount");
@@ -561,7 +574,7 @@ public class FeedCanvas extends Canvas {
         String repostsStr = String.valueOf(repostsCount);
         g.drawString(
                 repostsStr,
-                ICON_SIZE + PADDING*6 + likesWidth + commentsWidth,
+                iconSize + PADDING*6 + likesWidth + commentsWidth,
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );
@@ -569,7 +582,7 @@ public class FeedCanvas extends Canvas {
         //просмотры
         int viewsCount = post.getInt("viewsCount");
         String viewStr = String.valueOf(viewsCount);
-        int viewOffset = screenWidth - PADDING*2 - ICON_SIZE - strWidth(viewStr, fontPlain);
+        int viewOffset = screenWidth - PADDING*2 - iconSize - strWidth(viewStr, fontPlain);
         g.drawImage(
                 viewIcon,
                 viewOffset,
@@ -578,7 +591,7 @@ public class FeedCanvas extends Canvas {
         );
         g.drawString(
                 viewStr,
-                viewOffset + ICON_SIZE + PADDING,
+                viewOffset + iconSize + PADDING,
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );

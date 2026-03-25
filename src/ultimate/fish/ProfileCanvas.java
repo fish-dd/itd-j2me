@@ -23,11 +23,11 @@ public class ProfileCanvas extends FeedCanvas {
         this.profile = profile;
 
         try {
-            calendarIcon = ITD.getPNGRes("calendar");
+            calendarIcon = midlet.getIcon("calendar");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         bannerHeight = screenWidth / 3;
-        headerHeight = PADDING*4 + AVATAR_SIZE + lineHeight*2 + bannerHeight;
+        headerHeight = PADDING*4 + avatarSize + lineHeight*2 + bannerHeight;
         postsHeights.put(HEADER_ID, new Integer(headerHeight));
 
         JSONObject header = new JSONObject();
@@ -127,7 +127,7 @@ public class ProfileCanvas extends FeedCanvas {
             g.setColor(COLOR_TEXT);
             g.drawString(
                     displayName,
-                    PADDING * 2 + AVATAR_SIZE,
+                    PADDING * 2 + avatarSize,
                     userDataY,
                     Graphics.TOP | Graphics.LEFT
             );
@@ -136,7 +136,7 @@ public class ProfileCanvas extends FeedCanvas {
             //галочка
             boolean isVerified = profile.getBoolean("verified");
             if (isVerified) {
-                int verifiedX = Math.min(PADDING * 3 + AVATAR_SIZE + nameWidth, screenWidth - ICON_SIZE - PADDING);
+                int verifiedX = Math.min(PADDING * 3 + avatarSize + nameWidth, screenWidth - iconSize - PADDING);
                 g.drawImage(
                         verifiedIcon,
                         verifiedX,
@@ -149,7 +149,7 @@ public class ProfileCanvas extends FeedCanvas {
             String username = profile.getString("username");
             g.drawString(
                     "@"+username,
-                    PADDING * 2 + AVATAR_SIZE,
+                    PADDING * 2 + avatarSize,
                     userDataY + lineHeight + PADDING - 2,
                     Graphics.TOP | Graphics.LEFT
             );
@@ -160,7 +160,7 @@ public class ProfileCanvas extends FeedCanvas {
             g.drawString(
                     followersString,
                     PADDING,
-                    userDataY + PADDING + AVATAR_SIZE,
+                    userDataY + PADDING + avatarSize,
                     Graphics.TOP | Graphics.LEFT
             );
             int followersWidth = strWidth(followersString, fontPlain);
@@ -171,7 +171,7 @@ public class ProfileCanvas extends FeedCanvas {
             g.drawString(
                     followingString,
                     PADDING*3 + followersWidth,
-                    userDataY + PADDING + AVATAR_SIZE,
+                    userDataY + PADDING + avatarSize,
                     Graphics.TOP | Graphics.LEFT
             );
 
@@ -183,14 +183,14 @@ public class ProfileCanvas extends FeedCanvas {
             g.drawImage(
                     calendarIcon,
                     PADDING,
-                    userDataY + PADDING*2 + AVATAR_SIZE + lineHeight,
+                    userDataY + PADDING*2 + avatarSize + lineHeight,
                     Graphics.TOP | Graphics.LEFT
             );
             g.setFont(fontPlain);
             g.drawString(
                     regDate,
-                    PADDING*2 + ICON_SIZE,
-                    userDataY + PADDING*2 + AVATAR_SIZE + lineHeight,
+                    PADDING*2 + iconSize,
+                    userDataY + PADDING*2 + avatarSize + lineHeight,
                     Graphics.TOP | Graphics.LEFT
             );
 

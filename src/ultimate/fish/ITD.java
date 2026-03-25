@@ -21,7 +21,7 @@ public class ITD extends MIDlet {
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:5000"};
-    static String URL = URLS[0];
+    static String URL = URLS[2];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -63,8 +63,11 @@ public class ITD extends MIDlet {
 
     private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
     private RecordStore refreshTokenRec;
-    private final String SETTINGS_RECORD_STORE_NAME = "itd-db";
+    private final String SETTINGS_RECORD_STORE_NAME = "itd-settings";
     private RecordStore settingsRec;
+
+    public static final int[] SIZE_THRESHOLDS = {17};
+    public int iconSize = 16;
 
 
     protected void startApp() {
@@ -74,6 +77,7 @@ public class ITD extends MIDlet {
         appVersion = getAppProperty("MIDlet-Version");
 
         display = Display.getDisplay(this);
+        setIconSize();
 
         initCommands();
 
@@ -82,11 +86,11 @@ public class ITD extends MIDlet {
         display.setCurrent(startForm);
 
         try {
-            feedIcon = getPNGRes("home");
-            searchIcon = getPNGRes("search");
-            notificationsIcon = getPNGRes("notifications");
-            profileIcon = getPNGRes("account");
-            settingsIcon = getPNGRes("settings");
+            feedIcon = getIcon("home");
+            searchIcon = getIcon("search");
+            notificationsIcon = getIcon("notifications");
+            profileIcon = getIcon("account");
+            settingsIcon = getIcon("settings");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
         menuIcons = new Image[]{feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
 
@@ -135,7 +139,7 @@ public class ITD extends MIDlet {
     private void initCommands() {
         backToMenuCmd = new Command("Назад", Command.BACK, 1);
         selectCmd = new Command("Открыть", Command.OK, 1);
-        aboutCmd = new Command("О программе", Command.HELP, 2);
+        aboutCmd = new Command("О программе", Command.SCREEN, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
 
         feedCmdListener = new CommandListener() {
@@ -546,5 +550,20 @@ public class ITD extends MIDlet {
         try {
             Thread.sleep(J2ME_LOADER_FIX_SLEEP);
         } catch (InterruptedException ignored) {}
+    }
+
+    private void setIconSize() {
+        int lineHeight = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL).getHeight();
+        if (lineHeight <= SIZE_THRESHOLDS[0]) {
+            iconSize = 16;
+        }
+        else {
+            iconSize = 32;
+        }
+    }
+
+
+    public Image getIcon(String iconName) throws IOException {
+        return Image.createImage(Class.class.getResourceAsStream("/" + iconSize + "px/" + iconName + ".png"));
     }
 }
