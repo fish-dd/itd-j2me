@@ -102,16 +102,20 @@ public class ITD extends MIDlet {
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         startForm.append("Попытка достучаться до прокси...\n");
-        String connCode = "kong";
-        while (!connCode.equals("pong")) {
-            try {
-                connCode = getRequest(URL + "/ping");
-            } catch (Exception ignored) {
-                ITD.log("Ошибка теста подключения, ждём");
-                startForm.append("Ошибка теста подключения, ждём...\n");
-                try { Thread.sleep(5000); } catch (Exception ignored1) {}
+        new Thread(new Runnable() {
+            public void run() {
+                String connCode = "";
+                while (true) {
+                    connCode = getRequest(URL + "/ping");
+
+                    if (connCode != null && connCode.equals("pong")) break;
+
+                    ITD.log("Ошибка теста подключения, ждём");
+                    startForm.append("Ошибка теста подключения, ждём...\n");
+                    try { Thread.sleep(5000); } catch (Exception ignored1) {}
+                }
             }
-        }
+        }).start();
 
         startForm.append("Инициализация экрана ввода токена...\n");
         initTokenForm();
@@ -343,19 +347,18 @@ public class ITD extends MIDlet {
                 for (int i = 0; i < 3; i++) {
                     startForm.append("Проверка токена...\n");
 
-                    boolean isTokenValid = getRequest(URL + "/valid", refreshToken).equals("true");
-                    if (isTokenValid) {
+                    String isTokenValid = getRequest(URL + "/valid", refreshToken);
+                    if (isTokenValid != null && isTokenValid.equals("true")) {
                         initFeedCanvas();
                         return;
                     }
                 }
 
-                tokenForm.append("Кажется, токен недействителен.\n");
+                tokenForm.append("Не удалось проверить токен. Возможно, он истёк, или сервера итд недоступны.\n\n");
             }
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
-        tokenForm.append("Введите refresh-токен.\n" +
-                "Он находится в cookie браузера");
+        tokenForm.append("Введите refresh-токен. Он находится в cookie браузера.");
 
         final TextField keyInput = new TextField("Токен:", null, 128, TextField.ANY);
         tokenForm.append(keyInput);
@@ -469,7 +472,7 @@ public class ITD extends MIDlet {
         aboutForm.setCommandListener(aboutCmdListener);
         aboutForm.addCommand(backToMenuCmd);
 
-        StringItem title = new StringItem(null, "итд J2ME v" + appVersion + "\n");
+        StringItem title = new StringItem(null, "итд J2ME v" + appVersion + " (β)\n");
         title.setFont(Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_LARGE));
         title.setLayout(Item.LAYOUT_CENTER);
         aboutForm.append(title);

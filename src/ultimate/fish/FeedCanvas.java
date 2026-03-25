@@ -109,6 +109,7 @@ public class FeedCanvas extends Canvas {
         fontBold = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_BOLD, Font.SIZE_SMALL);
         fontPlain = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL);
         lineHeight = fontPlain.getHeight();
+        ITD.log("Высота строки текста: " + lineHeight);
     }
 
 

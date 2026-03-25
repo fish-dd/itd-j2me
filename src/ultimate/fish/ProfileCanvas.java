@@ -205,6 +205,7 @@ public class ProfileCanvas extends FeedCanvas {
         }
     }
 
+    
     private String numToMonth(String monthStr) {
         String[] months = {"Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                             "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"};
