@@ -21,14 +21,14 @@ public class ITD extends MIDlet {
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:5000"};
-    static String URL = URLS[2];
+    static String URL = URLS[0];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
     static int POSTS_LIMIT = 5;
     static int J2ME_LOADER_FIX_SLEEP = 200;
 
-    private Form startForm;
+    Form startForm;
 
     private Command keyEnterCommand = new Command("Ввод", Command.OK, 1);
     private Form tokenForm;
@@ -66,8 +66,10 @@ public class ITD extends MIDlet {
     private final String SETTINGS_RECORD_STORE_NAME = "itd-settings";
     private RecordStore settingsRec;
 
-    public static final int[] SIZE_THRESHOLDS = {17};
+    //связанное с масштабом
+    public static final int[] FONT_THRESHOLD = {17};
     public int iconSize = 16;
+    public int avatarSize = 32;
 
 
     protected void startApp() {
@@ -399,30 +401,10 @@ public class ITD extends MIDlet {
 
 
     private void initFeedCanvas() {
-        final String url = API_URL + "/posts?limit=" + POSTS_LIMIT + "&tab=popular";
-        final ITD midlet = this;
+        FeedCanvas feedCanvas = new FeedCanvas(this);
 
-        Runnable getPostsRunnable = new Runnable() {
-            public void run() {
-                try {
-                    startForm.append("Получение постов...\n");
-                    String postsResponse = getRequest(url, refreshToken);
-
-                    startForm.append("Парсинг JSON...\n");
-                    JSONObject json = JSON.getObject(postsResponse);
-                    JSONArray posts = json.getObject("data").getArray("posts");
-
-                    startForm.append("Иницализация экрана фида...\n");
-                    FeedCanvas feedCanvas = new FeedCanvas(posts, midlet);
-                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                    display.setCurrent(feedCanvas);
-                }
-                catch (Exception ignored) {startForm.append("Произошла ошибка");}
-            }
-        };
-        startForm.append("Запуск потока...\n");
-        connectThread = new Thread(getPostsRunnable);
-        connectThread.start();
+        loaderSleep();
+        display.setCurrent(feedCanvas);
     }
 
 
@@ -546,24 +528,28 @@ public class ITD extends MIDlet {
     }
 
 
-    private static void loaderSleep() {
+    static void loaderSleep() {
         try {
             Thread.sleep(J2ME_LOADER_FIX_SLEEP);
         } catch (InterruptedException ignored) {}
     }
 
+
     private void setIconSize() {
         int lineHeight = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL).getHeight();
-        if (lineHeight <= SIZE_THRESHOLDS[0]) {
-            iconSize = 16;
-        }
-        else {
+        if (lineHeight > FONT_THRESHOLD[0]) {
             iconSize = 32;
+            avatarSize = 64;
         }
     }
 
 
     public Image getIcon(String iconName) throws IOException {
         return Image.createImage(Class.class.getResourceAsStream("/" + iconSize + "px/" + iconName + ".png"));
+    }
+
+
+    void startPrintln(String text) {
+        if (startForm.isShown()) startForm.append(text + "\n");
     }
 }

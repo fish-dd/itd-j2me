@@ -19,7 +19,7 @@ public class ProfileCanvas extends FeedCanvas {
 
 
     public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
-        super(posts, midlet);
+        super(midlet);
         this.profile = profile;
 
         try {
