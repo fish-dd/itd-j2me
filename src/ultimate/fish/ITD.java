@@ -1,9 +1,6 @@
 package ultimate.fish;
 
 //нектар шиновона, межгалактический респект
-import cc.nnproject.json.JSON;
-import cc.nnproject.json.JSONArray;
-import cc.nnproject.json.JSONObject;
 
 import javax.microedition.io.Connector;
 import javax.microedition.io.HttpConnection;
@@ -58,7 +55,6 @@ public class ITD extends MIDlet {
 
     public CommandListener settingsCmdListener;
 
-    public Thread connectThread;
     private String refreshToken;
 
     private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
@@ -140,7 +136,7 @@ public class ITD extends MIDlet {
 
     private void initCommands() {
         backToMenuCmd = new Command("Назад", Command.BACK, 1);
-        selectCmd = new Command("Открыть", Command.OK, 1);
+        selectCmd = new Command("Открыть", Command.ITEM, 1);
         aboutCmd = new Command("О программе", Command.SCREEN, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
 
@@ -334,12 +330,12 @@ public class ITD extends MIDlet {
 
 
     static void log(int integer) {
-        if (!ITD.DEBUG) System.out.println(integer);
+        if (ITD.DEBUG) System.out.println(integer);
     }
 
 
     static void log(boolean bool) {
-        if (!ITD.DEBUG) System.out.println(bool);
+        if (ITD.DEBUG) System.out.println(bool);
     }
 
 
@@ -418,27 +414,10 @@ public class ITD extends MIDlet {
 
     private void initProfileCanvas() {
         final String profileUrl = API_URL + "/users/me";
-        final ITD midlet = this;
+        ProfileCanvas profileCanvas = new ProfileCanvas(this, profileUrl);
 
-        Runnable getPostsRunnable = new Runnable() {
-            public void run() {
-                String profileResponse = getRequest(profileUrl,  refreshToken);
-
-                JSONObject profile = JSON.getObject(profileResponse);
-
-                String username = profile.getString("username");
-                String postsUrl = API_URL + "/posts/user/" + username + "?limit=" + POSTS_LIMIT + "&sort=new";
-                String postsResponse = getRequest(postsUrl, refreshToken);
-                JSONObject json = JSON.getObject(postsResponse);
-                JSONArray posts = json.getObject("data").getArray("posts");
-
-                ProfileCanvas profileCanvas = new ProfileCanvas(profile, posts, midlet);
-                loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                display.setCurrent(profileCanvas);
-            }
-        };
-        connectThread = new Thread(getPostsRunnable);
-        connectThread.start();
+        loaderSleep();
+        display.setCurrent(profileCanvas);
     }
 
 

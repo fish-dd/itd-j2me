@@ -1,14 +1,36 @@
 package ultimate.fish;
 
+import cc.nnproject.json.JSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
+import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
+import java.util.Hashtable;
 import java.util.Vector;
 
 public class ProfileCanvas extends FeedCanvas {
+    private String profileUrl;
     private JSONObject profile;
+
+    static final String[] URL_PARTS = {ITD.API_URL + "/posts/user/", "?limit=", "&sort=new", "&cursor="};
+
+    String cursor = null;
+    Runnable postRunnable = new Runnable() {
+        public void run() {
+            while (true) {
+                synchronized (postLoadNotifier) {
+                    try {
+                        postLoadNotifier.wait();
+                    } catch (Exception e) { ITD.log(String.valueOf(e)); }
+                }
+
+                loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
+                repaint();
+            }
+        }
+    };
 
     static final int COLOR_BANNER = 0x323232;
 
@@ -18,9 +40,9 @@ public class ProfileCanvas extends FeedCanvas {
     private final String HEADER_ID = "header";
 
 
-    public ProfileCanvas(JSONObject profile, JSONArray posts, ITD midlet) {
+    public ProfileCanvas(ITD midlet, String profileUrl) {
         super(midlet);
-        this.profile = profile;
+        this.profileUrl = profileUrl;
 
         try {
             calendarIcon = midlet.getIcon("calendar");
@@ -35,9 +57,28 @@ public class ProfileCanvas extends FeedCanvas {
 
         elements = new Vector();
         elements.addElement(header);
+        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
+        postLoader.interrupt();
+        postLoader = new Thread(postRunnable);
+        postLoader.start();
+    }
+
+
+    private void loadPosts(String profileUrl, final int postsLimit, String cursor) {
+        String profileResponse = ITD.getRequest(profileUrl,  midlet.getRefreshToken());
+        profile = JSON.getObject(profileResponse);
+
+        String username = profile.getString("username");
+        String postsUrl = URL_PARTS[0] + username + URL_PARTS[1] + postsLimit + URL_PARTS[2];
+        if (cursor != null) postsUrl += URL_PARTS[3] + cursor;
+        String postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken());
+        JSONArray posts = JSON.getObject(postsResponse).getObject("data").getArray("posts");
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
         }
+
+        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
+        Display.getDisplay(midlet).setCurrent(this);
     }
 
 
@@ -45,6 +86,14 @@ public class ProfileCanvas extends FeedCanvas {
         // 1. Очистка экрана
         g.setColor(COLOR_BG);
         g.fillRect(0, 0, screenWidth, screenHeight);
+
+        //чтобы почистить очередь областей нажатия
+        if (hasPointerEvents()) {
+            likesHitboxes = new Hashtable();
+            repostsHitboxes = new Hashtable();
+        }
+
+        elementsHeightTemp = 0;
 
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
@@ -61,10 +110,23 @@ public class ProfileCanvas extends FeedCanvas {
 
             currentY += ((Integer) postsHeights.get(element.getString("id"))).intValue();
         }
+
+        elementsHeight = elementsHeightTemp;
+
+        if (scrollY + screenHeight > elementsHeight) {
+            JSONObject lastPost = (JSONObject) elements.lastElement();
+            cursor = lastPost.getString("createdAt");
+
+            synchronized (postLoadNotifier) {
+                postLoadNotifier.notify();
+            }
+        }
     }
 
 
     private void drawProfileHeader(Graphics g, int currentY, boolean isSelected) {
+        elementsHeightTemp += headerHeight;
+
         if (currentY + headerHeight > 0) {
             if (isSelected) {
                 g.setColor(COLOR_SEL);

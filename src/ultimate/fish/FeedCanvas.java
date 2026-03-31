@@ -11,12 +11,16 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 public class FeedCanvas extends Canvas {
+    static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular", "&cursor="};
+
     ITD midlet;
 
     Hashtable postsStrings = new Hashtable(); //словарь из массивов со строками постов
     Hashtable repostsStrings = new Hashtable();
     Hashtable postsHeights = new Hashtable(); //высоты постов и отдельных медиа постов
     Hashtable repostsMediaHeights = new Hashtable(); //высоты репостов и отдельных медиа репостов
+    int elementsHeightTemp;
+    int elementsHeight;
 
     Vector viewedPosts = new Vector();
 
@@ -27,6 +31,25 @@ public class FeedCanvas extends Canvas {
     Hashtable medias = new Hashtable();
     Vector mediasQueue = new Vector();
     Thread mediaLoader;
+
+    Object postLoadNotifier = new Object();
+    Thread postLoader;
+    Runnable postRunnable = new Runnable() {
+        public void run() {
+            while (true) {
+                synchronized (postLoadNotifier) {
+                    try {
+                        postLoadNotifier.wait();
+                    } catch (Exception e) { ITD.log(String.valueOf(e)); }
+                }
+
+                loadPosts(ITD.POSTS_LIMIT, cursor);
+                cursor++;
+                repaint();
+            }
+        }
+    };
+    int cursor = 2;
 
     Vector elements = new Vector();
 
@@ -54,8 +77,6 @@ public class FeedCanvas extends Canvas {
     static final float MAX_MEDIA_RATIO = 3f;
 
     static final int SCROLL_HEIGHT = 100;
-    
-    static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular"};
 
     int postMediaWidth;
     int repostMediaWidth;
@@ -76,12 +97,24 @@ public class FeedCanvas extends Canvas {
     static final int REPOST = 1;
     static final int BANNER = 2;
 
+    double SCROLL_SLOWDOWN_COEF = 0.8;
+    double SCROLL_THRESHOLD = 1.5;
+    double SCROLL_VELOCITY = 50;
+    double SCROLL_END = 2;
+    int SCROLL_OVERFLOW = 50;
+    int SCROLL_FRAMERATE = 30;
+    Thread scrollThread = new Thread();
     boolean showSelection;
     boolean isPressed = false;
     boolean isDragged = false;
-    int touchY = 0;
-    Hashtable likesTouchPoints;
-    Hashtable repostsTouchPoints;
+    int touchY;
+    int prevTouchY;
+    int startTouchY;
+    long startTouchTime;
+
+    Hashtable likesHitboxes;
+    Hashtable repostsHitboxes;
+
 
 
     public FeedCanvas(ITD midlet) {
@@ -95,14 +128,14 @@ public class FeedCanvas extends Canvas {
 
         initAvatarLoader();
         initMediaLoader();
+        initPostLoader();
 
-        loadPosts(ITD.POSTS_LIMIT);
+        loadPosts(ITD.POSTS_LIMIT, 0);
 
         setCommandListener(midlet.feedCmdListener);
         addCommand(midlet.backToMenuCmd);
-        if (!showSelection) {
-            addCommand(midlet.likeCmd);
-            addCommand(midlet.selectCmd);
+        if (showSelection) {
+            addNontouchCmds();
         }
 
         ITD.log("фид стартовал");
@@ -333,10 +366,20 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    private void loadPosts(int postsLimit) {
+    void initPostLoader() {
+        ITD.log("пост поток");
+        postLoader = new Thread(postRunnable);
+
+        ITD.log("пост поток запуск");
+        postLoader.start();
+    }
+
+
+    private void loadPosts(int postsLimit, int cursor) {
         try {
             midlet.startPrintln("Получение постов...");
             String url = URL_PARTS[0] + postsLimit + URL_PARTS[1];
+            if (cursor != 0) url += URL_PARTS[2] + cursor;
             String postsResponse = ITD.getRequest(url, midlet.getRefreshToken());
 
             midlet.startPrintln("Парсинг JSON...");
@@ -347,10 +390,6 @@ public class FeedCanvas extends Canvas {
             for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
                 elements.addElement(posts.get(postIndex));
             }
-
-            midlet.startPrintln("Иницализация экрана фида...");
-            ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
-            Display.getDisplay(midlet).setCurrent(this);
         }
         catch (Exception ignored) { midlet.startPrintln("Произошла ошибка"); }
     }
@@ -363,9 +402,11 @@ public class FeedCanvas extends Canvas {
 
         //чтобы почистить очередь областей нажатия
         if (hasPointerEvents()) {
-            likesTouchPoints = new Hashtable();
-            repostsTouchPoints = new Hashtable();
+            likesHitboxes = new Hashtable();
+            repostsHitboxes = new Hashtable();
         }
+
+        elementsHeightTemp = 0;
 
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
@@ -378,6 +419,14 @@ public class FeedCanvas extends Canvas {
             drawPost(g, currentY, post, isSelected);
             // Сдвигаем курсор рисования вниз
             currentY += ((Integer) postsHeights.get(post.getString("id"))).intValue();
+        }
+
+        elementsHeight = elementsHeightTemp;
+
+        if (scrollY + screenHeight > elementsHeight) {
+            synchronized (postLoadNotifier) {
+                postLoadNotifier.notify();
+            }
         }
     }
 
@@ -395,6 +444,7 @@ public class FeedCanvas extends Canvas {
         }
 
         int postHeight = getPostHeight(post);
+        elementsHeightTemp += postHeight;
 
         // Оптимизация: Рисуем, только если пост попадает в экран
         if (currentY + postHeight > 0 && currentY < screenHeight) {
@@ -507,11 +557,11 @@ public class FeedCanvas extends Canvas {
         }
 
         //время публикации
-        int createdAt = post.getInt("createdAt");
+        int age = post.getInt("age");
         g.setFont(fontBold);
         g.setColor(COLOR_TEXT);
         g.drawString(
-                createdAt + " секунд назад",
+                age + " секунд назад",
                 PADDING * 2 + avatarSize + offset,
                 userDataY + avatarSize - lineHeight,
                 Graphics.TOP | Graphics.LEFT
@@ -593,7 +643,7 @@ public class FeedCanvas extends Canvas {
         int likesWidth = iconSize + PADDING + strWidth(likesStr, fontPlain);
         //границы сенсорной кнопки лайка
         if (hasPointerEvents()) {
-            likesTouchPoints.put(new int[] {
+            likesHitboxes.put(new int[] {
                     PADDING,
                     metadataY,
                     PADDING + likesWidth,
@@ -656,6 +706,7 @@ public class FeedCanvas extends Canvas {
     protected void keyPressed(int keyCode) { //обработка нажатий клавиш
         if (!showSelection) {
             showSelection = true;
+            addNontouchCmds();
             repaint();
             return;
         }
@@ -686,21 +737,35 @@ public class FeedCanvas extends Canvas {
 
     protected void pointerPressed(int x, int y) {
         ITD.log("НАЖАТИЕ " + x + " " + y);
+        scrollThread.interrupt();
         isPressed = true;
+        removeNontouchCmds();
+        showSelection = false;
     }
 
 
     protected void pointerDragged(int x, int y) {
         isPressed = false;
         if (!isDragged) {
+            scrollThread.interrupt();
             isDragged = true;
-            touchY = y;
+            removeNontouchCmds();
+            showSelection = false;
+            touchY = prevTouchY = startTouchY = y;
+            startTouchTime = System.currentTimeMillis();
         }
-        showSelection = false;
 
         scrollY -= y - touchY;
-        scrollY = Math.max(scrollY, 0);
+        scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW);
 
+        int dPrev = prevTouchY - touchY;
+        int dNow = touchY - y;
+        if (Math.abs(dPrev) + Math.abs(dNow) != Math.abs(dPrev + dNow)) {
+            touchY = prevTouchY = startTouchY = y;
+            startTouchTime = System.currentTimeMillis();
+        }
+
+        prevTouchY = touchY;
         touchY = y;
         repaint();
     }
@@ -709,19 +774,42 @@ public class FeedCanvas extends Canvas {
     protected void pointerReleased(int x, int y) {
         if (!isPressed) {
             isDragged = false;
+
+            int deltaTouchY = startTouchY - y;
+            long deltaTime = System.currentTimeMillis() - startTouchTime;
+            float velocityCoef = (float)deltaTouchY / (float)deltaTime;
+            if (Math.abs(velocityCoef) > 1.5) inertialScroll(velocityCoef);
+
             return;
         }
         ITD.log("ОТПУСТИЕ НАЖАТИЯ " + x + " " + y);
 
-        Enumeration ltpEnumKeys = likesTouchPoints.keys();
-        while (ltpEnumKeys.hasMoreElements()) {
-            int[] c /*coords*/ = (int[]) ltpEnumKeys.nextElement();
+        Enumeration likeHbEnumKeys = likesHitboxes.keys();
+        while (likeHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Отправка лайка");
-                likePost((JSONObject) likesTouchPoints.get(c));
+                likePost((JSONObject) likesHitboxes.get(c));
                 break;
             }
         }
+    }
+
+
+    void inertialScroll(final float coef) {
+        scrollThread = new Thread(new Runnable() {
+            public void run() {
+                float velocity = (float)SCROLL_VELOCITY * coef;
+                while (Math.abs(velocity) > 2) {
+                    scrollY += (int) velocity;
+                    scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW);
+                    velocity *= SCROLL_SLOWDOWN_COEF;
+                    repaint();
+                    try { Thread.sleep(1000/SCROLL_FRAMERATE); } catch (InterruptedException ignored) {}
+                }
+            }
+        });
+        scrollThread.start();
     }
 
 
@@ -975,7 +1063,21 @@ public class FeedCanvas extends Canvas {
     public void stopFeed() {
         avatarLoader.interrupt();
         mediaLoader.interrupt();
+        postLoader.interrupt();
         setCommandListener(null);
         removeCommand(midlet.backToMenuCmd);
+        removeNontouchCmds();
+    }
+
+
+    void addNontouchCmds() {
+        addCommand(midlet.likeCmd);
+        addCommand(midlet.selectCmd);
+    }
+
+
+    void removeNontouchCmds() {
+        removeCommand(midlet.likeCmd);
+        removeCommand(midlet.selectCmd);
     }
 }
