@@ -14,3 +14,6 @@ Nokia-MIDlet-Background-Event: pause
 LGE-MIDlet-Display-Nav-Keypad: no
 LGE-MIDlet-On-Screen-Keypad: no
 Nokia-MIDlet-On-Screen-Keypad: no
+Nokia-MIDlet-App-Orientation: portrait
+MIDlet-ScreenMode: Portrait
+LGE-MIDlet-Orientation-Lock: portrait

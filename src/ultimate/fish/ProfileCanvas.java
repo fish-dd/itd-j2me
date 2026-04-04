@@ -17,20 +17,7 @@ public class ProfileCanvas extends FeedCanvas {
     static final String[] URL_PARTS = {ITD.API_URL + "/posts/user/", "?limit=", "&sort=new", "&cursor="};
 
     String cursor = null;
-    Runnable postRunnable = new Runnable() {
-        public void run() {
-            while (true) {
-                synchronized (postLoadNotifier) {
-                    try {
-                        postLoadNotifier.wait();
-                    } catch (Exception e) { ITD.log(String.valueOf(e)); }
-                }
-
-                loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
-                repaint();
-            }
-        }
-    };
+    boolean isNoMorePosts = false;
 
     static final int COLOR_BANNER = 0x323232;
 
@@ -41,26 +28,74 @@ public class ProfileCanvas extends FeedCanvas {
 
 
     public ProfileCanvas(ITD midlet, String profileUrl) {
-        super(midlet);
+        this.midlet = midlet;
+        this.showSelection = !hasPointerEvents();
         this.profileUrl = profileUrl;
 
+        setFullScreenMode(false);
+        initFonts();
+        setScreenSize();
+        initIcons();
+
+        initAvatarLoader();
+//        initMediaLoader();
+        initPostLoader();
+
+        getHeaderSize();
+        addHeader();
+
+        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
+
+        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
+        Display.getDisplay(midlet).setCurrent(this);
+    }
+
+
+    void initIcons() {
+        super.initIcons();
         try {
             calendarIcon = midlet.getIcon("calendar");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
+    }
 
+
+    void initPostLoader() {
+        ITD.log("пост поток");
+        postLoader = new Thread(new Runnable() {
+            public void run() {
+                do {
+                    synchronized (postLoadNotifier) {
+                        try {
+                            postLoadNotifier.wait();
+                        } catch (Exception e) {
+                            ITD.log(String.valueOf(e));
+                        }
+                    }
+
+                    loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
+                    repaint();
+                    arePostsRequested = false;
+
+                } while (!isNoMorePosts);
+            }
+        });
+
+        ITD.log("пост поток запуск");
+        postLoader.start();
+    }
+
+
+    private void getHeaderSize() {
         bannerHeight = screenWidth / 3;
         headerHeight = PADDING*4 + avatarSize + lineHeight*2 + bannerHeight;
         postsHeights.put(HEADER_ID, new Integer(headerHeight));
+    }
 
+
+    private void addHeader() {
         JSONObject header = new JSONObject();
         header.put("id", HEADER_ID);
-
-        elements = new Vector();
         elements.addElement(header);
-        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
-        postLoader.interrupt();
-        postLoader = new Thread(postRunnable);
-        postLoader.start();
     }
 
 
@@ -77,8 +112,24 @@ public class ProfileCanvas extends FeedCanvas {
             elements.addElement(posts.get(postIndex));
         }
 
-        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
-        Display.getDisplay(midlet).setCurrent(this);
+        if (posts.size() == 0) {
+            ITD.log("Больше постов нет");
+            isNoMorePosts = true;
+        }
+    }
+
+
+    void requestPosts() {
+        if (!arePostsRequested && !isNoMorePosts) {
+            arePostsRequested = true;
+            JSONObject lastPost = (JSONObject) elements.lastElement();
+            cursor = lastPost.getString("createdAt");
+            ITD.log("Курсор " + cursor);
+
+            synchronized (postLoadNotifier) {
+                postLoadNotifier.notify();
+            }
+        }
     }
 
 
@@ -113,14 +164,7 @@ public class ProfileCanvas extends FeedCanvas {
 
         elementsHeight = elementsHeightTemp;
 
-        if (scrollY + screenHeight > elementsHeight) {
-            JSONObject lastPost = (JSONObject) elements.lastElement();
-            cursor = lastPost.getString("createdAt");
-
-            synchronized (postLoadNotifier) {
-                postLoadNotifier.notify();
-            }
-        }
+        if (scrollY + screenHeight > elementsHeight) requestPosts();
     }
 
 

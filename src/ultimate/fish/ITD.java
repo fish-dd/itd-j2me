@@ -1,7 +1,5 @@
 package ultimate.fish;
 
-//нектар шиновона, межгалактический респект
-
 import javax.microedition.io.Connector;
 import javax.microedition.io.HttpConnection;
 import javax.microedition.lcdui.*;
@@ -11,23 +9,26 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = true;
+    static final boolean DEBUG = false;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 
     private Display display;
 
-    static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:5000"};
-    static String URL = URLS[0];
+    static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
+    static String URL = URLS[3];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
     static int POSTS_LIMIT = 5;
-    static int J2ME_LOADER_FIX_SLEEP = 200;
+    static int J2ME_LOADER_FIX_SLEEP = 100;
 
-    Form startForm;
+    private Form startForm;
 
-    private Command keyEnterCommand = new Command("Ввод", Command.OK, 1);
+    private ItemCommandListener startCmdListener;
+    private Command keyEnterCommand;
+    private Command keyRetryCommand;
+    private TextField keyInput;
     private Form tokenForm;
 
     private List menuList;
@@ -55,7 +56,7 @@ public class ITD extends MIDlet {
 
     public CommandListener settingsCmdListener;
 
-    private String refreshToken;
+    private String refreshToken = null;
 
     private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
     private RecordStore refreshTokenRec;
@@ -98,14 +99,14 @@ public class ITD extends MIDlet {
             throw new RuntimeException();
         }
 
-        startForm.append("Открытие хранилища записей...\n");
+        startPrintln("Открытие хранилища записей...");
         try {
             refreshTokenRec = RecordStore.openRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME, true);
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
-        startForm.append("Попытка достучаться до прокси...\n");
-        new Thread(new Runnable() {
-            public void run() {
+        startPrintln("Попытка достучаться до прокси...");
+//        new Thread(new Runnable() {
+//            public void run() {
                 String connCode = "";
                 while (true) {
                     connCode = getRequest(URL + "/ping");
@@ -113,13 +114,13 @@ public class ITD extends MIDlet {
                     if (connCode != null && connCode.equals("pong")) break;
 
                     ITD.log("Ошибка теста подключения, ждём");
-                    startForm.append("Ошибка теста подключения, ждём...\n");
+                    startPrintln("Ошибка теста подключения, ждём...");
                     try { Thread.sleep(5000); } catch (Exception ignored1) {}
                 }
-            }
-        }).start();
+//            }
+//        }).start();
 
-        startForm.append("Инициализация экрана ввода токена...\n");
+        startPrintln("Инициализация экрана ввода токена...");
         initTokenForm();
     }
 
@@ -139,6 +140,8 @@ public class ITD extends MIDlet {
         selectCmd = new Command("Открыть", Command.ITEM, 1);
         aboutCmd = new Command("О программе", Command.SCREEN, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
+        keyEnterCommand = new Command("Ввод", Command.OK, 1);
+        keyRetryCommand = new Command("Повторить", Command.OK, 2);
 
         feedCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
@@ -150,9 +153,8 @@ public class ITD extends MIDlet {
                     display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
                 }
                 else if (command == backToMenuCmd) {
-                    ((FeedCanvas) displayable).stopFeed();
-                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
                     display.setCurrent(menuList);
+                    ((FeedCanvas) displayable).stopFeed();
                 }
             }
         };
@@ -191,6 +193,34 @@ public class ITD extends MIDlet {
                     loaderSleep(); //потому что ж2ме лоудер крашится без этого
                     display.setCurrent(menuList);
                 }
+            }
+        };
+        startCmdListener = new ItemCommandListener() {
+            public void commandAction(Command command, Item item) {
+                display.setCurrent(startForm);
+
+                if (command == keyEnterCommand) {
+                    tokenForm.deleteAll();
+
+                    startPrintln("Сохранение токена...");
+
+                    try {
+                        refreshToken = keyInput.getString();
+                        byte[] refreshTokenBytes = refreshToken.getBytes();
+
+                        startPrintln("Запись токена в RMS...");
+
+                        refreshTokenRec.closeRecordStore();
+                        RecordStore.deleteRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME);
+                        refreshTokenRec = RecordStore.openRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME, true);
+
+                        refreshTokenRec.addRecord(refreshTokenBytes, 0, refreshTokenBytes.length);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e.toString());
+                    }
+                }
+
+                initTokenForm();
             }
         };
     }
@@ -343,53 +373,37 @@ public class ITD extends MIDlet {
         this.tokenForm = new Form("Вход");
 
         try {
-            if (refreshTokenRec.getNumRecords() >= 1) {
-                this.refreshToken = new String(refreshTokenRec.getRecord(1), "UTF-8");
-
-                for (int i = 0; i < 3; i++) {
-                    startForm.append("Проверка токена...\n");
-
-                    String isTokenValid = getRequest(URL + "/valid", refreshToken);
-                    if (isTokenValid != null && isTokenValid.equals("true")) {
-                        initFeedCanvas();
-                        return;
-                    }
-                }
-
-                tokenForm.append("Не удалось проверить токен. Возможно, он истёк, или сервера итд недоступны.\n\n");
+            if (refreshTokenRec.getNumRecords() == 1) {
+                refreshToken = new String(refreshTokenRec.getRecord(1), "UTF-8");
             }
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
+        if (refreshToken != null) {
+            if (testRefreshToken(refreshToken)) {
+                startPrintln("Запуск фида...");
+                initFeedCanvas();
+                return;
+            }
+
+            tokenForm.append("Не удалось проверить токен. Возможно, он истёк, или сервера итд недоступны.\n");
+        }
+
         tokenForm.append("Введите refresh-токен. Он находится в cookie браузера.");
 
-        final TextField keyInput = new TextField("Токен:", null, 128, TextField.ANY);
+        keyInput = new TextField("Токен:", null, 64, TextField.ANY);
         tokenForm.append(keyInput);
 
-        StringItem button = new StringItem(null, "Ввод", Item.BUTTON);
-        button.setDefaultCommand(keyEnterCommand);
-        ItemCommandListener commandListener = new ItemCommandListener() {
-            public void commandAction(Command command, Item item) {
-                tokenForm.deleteAll();
-                loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                display.setCurrent(startForm);
-                startForm.append("Сохранение токена...\n");
+        StringItem enterButton = new StringItem(null, "Ввод", Item.BUTTON);
+        enterButton.setDefaultCommand(keyEnterCommand);
+        enterButton.setItemCommandListener(startCmdListener);
+        tokenForm.append(enterButton);
 
-                try {
-                    refreshToken = keyInput.getString();
-                    byte[] refreshTokenBytes = refreshToken.getBytes();
-                    startForm.append("Запись токена в RMS...\n");
-                    try {
-                        RecordStore.deleteRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME);
-                    } catch(Exception ignored) {}
-                    refreshTokenRec.addRecord(refreshTokenBytes, 0, refreshTokenBytes.length);
-                } catch (Exception e) { throw new RuntimeException(e.toString()); }
-
-                startForm.append("Запуск фида...\n");
-                initFeedCanvas();
-            }
-        };
-        button.setItemCommandListener(commandListener);
-        tokenForm.append(button);
+        if (refreshToken != null) {
+            StringItem retryButton = new StringItem(null, "Повторить", Item.BUTTON);
+            retryButton.setDefaultCommand(keyRetryCommand);
+            retryButton.setItemCommandListener(startCmdListener);
+            tokenForm.append(retryButton);
+        }
 
         loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(tokenForm);
@@ -530,5 +544,19 @@ public class ITD extends MIDlet {
 
     void startPrintln(String text) {
         if (startForm.isShown()) startForm.append(text + "\n");
+    }
+
+
+    boolean testRefreshToken(String refreshToken) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            startPrintln("Проверка токена...");
+
+            String isTokenValid = getRequest(URL + "/valid", refreshToken);
+            if (isTokenValid != null && isTokenValid.equals("true")) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

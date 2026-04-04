@@ -32,24 +32,10 @@ public class FeedCanvas extends Canvas {
     Vector mediasQueue = new Vector();
     Thread mediaLoader;
 
-    Object postLoadNotifier = new Object();
+    final Object postLoadNotifier = new Object();
     Thread postLoader;
-    Runnable postRunnable = new Runnable() {
-        public void run() {
-            while (true) {
-                synchronized (postLoadNotifier) {
-                    try {
-                        postLoadNotifier.wait();
-                    } catch (Exception e) { ITD.log(String.valueOf(e)); }
-                }
-
-                loadPosts(ITD.POSTS_LIMIT, cursor);
-                cursor++;
-                repaint();
-            }
-        }
-    };
     int cursor = 2;
+    boolean arePostsRequested = false;
 
     Vector elements = new Vector();
 
@@ -73,7 +59,7 @@ public class FeedCanvas extends Canvas {
     static final int COLOR_BG = 0x000000;
     static final int COLOR_TEXT = 0xE4E6E8;
     static final int COLOR_SEL = 0x242424;
-    static final int COLOR_BLUE = 0x0000FF;
+    static final int COLOR_LOADING = 0x323232;
     static final float MAX_MEDIA_RATIO = 3f;
 
     static final int SCROLL_HEIGHT = 100;
@@ -97,12 +83,14 @@ public class FeedCanvas extends Canvas {
     static final int REPOST = 1;
     static final int BANNER = 2;
 
-    double SCROLL_SLOWDOWN_COEF = 0.8;
-    double SCROLL_THRESHOLD = 1.5;
-    double SCROLL_VELOCITY = 50;
-    double SCROLL_END = 2;
-    int SCROLL_OVERFLOW = 50;
-    int SCROLL_FRAMERATE = 30;
+    static final double SCROLL_SLOWDOWN_COEF = 0.8;
+    static final double SCROLL_THRESHOLD = 0.7;
+    static final double SCROLL_VELOCITY = 50;
+    static final double SCROLL_END = 2;
+    static final float SCROLL_MAX_COEF = 5f;
+    static final int SCROLL_OVERFLOW = 16;
+    static final int SCROLL_FRAMERATE = 30;
+    static final int SCROLL_MIN_MOVE = 80;
     Thread scrollThread = new Thread();
     boolean showSelection;
     boolean isPressed = false;
@@ -114,7 +102,6 @@ public class FeedCanvas extends Canvas {
 
     Hashtable likesHitboxes;
     Hashtable repostsHitboxes;
-
 
 
     public FeedCanvas(ITD midlet) {
@@ -132,14 +119,13 @@ public class FeedCanvas extends Canvas {
 
         loadPosts(ITD.POSTS_LIMIT, 0);
 
-        setCommandListener(midlet.feedCmdListener);
-        addCommand(midlet.backToMenuCmd);
-        if (showSelection) {
-            addNontouchCmds();
-        }
+        initCommands();
 
         ITD.log("фид стартовал");
     }
+
+
+    public FeedCanvas() {}
 
 
     void setScreenSize() {
@@ -177,6 +163,15 @@ public class FeedCanvas extends Canvas {
             repostIcon = midlet.getIcon("repost");
             verifiedIcon = midlet.getIcon("verified");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
+    }
+
+
+    private void initCommands() {
+        setCommandListener(midlet.feedCmdListener);
+        addCommand(midlet.backToMenuCmd);
+        if (showSelection) {
+            addNontouchCmds();
+        }
     }
 
 
@@ -368,7 +363,22 @@ public class FeedCanvas extends Canvas {
 
     void initPostLoader() {
         ITD.log("пост поток");
-        postLoader = new Thread(postRunnable);
+        postLoader = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    synchronized (postLoadNotifier) {
+                        try {
+                            postLoadNotifier.wait();
+                        } catch (Exception e) { ITD.log(String.valueOf(e)); }
+                    }
+
+                    loadPosts(ITD.POSTS_LIMIT, cursor);
+                    cursor++;
+                    repaint();
+                    arePostsRequested = false;
+                }
+            }
+        });
 
         ITD.log("пост поток запуск");
         postLoader.start();
@@ -392,6 +402,16 @@ public class FeedCanvas extends Canvas {
             }
         }
         catch (Exception ignored) { midlet.startPrintln("Произошла ошибка"); }
+    }
+
+
+    void requestPosts() {
+        if (!arePostsRequested) {
+            arePostsRequested = true;
+            synchronized (postLoadNotifier) {
+                postLoadNotifier.notify();
+            }
+        }
     }
 
 
@@ -423,11 +443,7 @@ public class FeedCanvas extends Canvas {
 
         elementsHeight = elementsHeightTemp;
 
-        if (scrollY + screenHeight > elementsHeight) {
-            synchronized (postLoadNotifier) {
-                postLoadNotifier.notify();
-            }
-        }
+        if (scrollY + screenHeight > elementsHeight) requestPosts();
     }
 
 
@@ -449,9 +465,11 @@ public class FeedCanvas extends Canvas {
         // Оптимизация: Рисуем, только если пост попадает в экран
         if (currentY + postHeight > 0 && currentY < screenHeight) {
             // Рисуем фон выделения, если пост выбран курсором
-            if (isSelected && showSelection) {
-                g.setColor(COLOR_SEL);
-                g.fillRect(0, currentY, screenWidth, postHeight);
+            if (isSelected) {
+                if (showSelection) {
+                    g.setColor(COLOR_SEL);
+                    g.fillRect(0, currentY, screenWidth, postHeight);
+                }
 
                 if (!viewedPosts.contains(id)) {
                     ITD.log("Отправка просмотра " + id);
@@ -507,7 +525,7 @@ public class FeedCanvas extends Canvas {
 
             // Разделительная линия
             g.setColor(COLOR_SEL);
-            g.drawLine(0, currentY + postHeight - 1, screenWidth, currentY + postHeight - 1);
+            g.drawLine(0, currentY + postHeight - 1, screenWidth - 1, currentY + postHeight - 1);
         }
     }
 
@@ -590,27 +608,38 @@ public class FeedCanvas extends Canvas {
                 String url = mediaInfo.getString("url");
                 String fileName = ITD.getFileName(url);
 
+                int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
+                int mediaY = currentY + PADDING*(3+mediaIndex) + avatarSize +
+                        lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex);
+
                 if (medias.containsKey(fileName)) {
                     Image media = (Image) medias.get(fileName);
-                    int mediaHeight = ((Integer) mediaHeights.get(fileName)).intValue();
 
                     g.drawImage(
                             media,
                             PADDING + offset,
-                            currentY + PADDING*(3+mediaIndex) + avatarSize +
-                                    lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex),
+                            mediaY,
                             0
                     );
                 }
                 else {
+                    g.setColor(COLOR_LOADING);
+                    g.fillRect(
+                            PADDING + offset,
+                            mediaY,
+                            isRepost ? repostMediaWidth : postMediaWidth,
+                            mediaHeight
+                    );
+
+                    Vector mediaRequest = new Vector(3);
+
+                    mediaRequest.addElement(fileName);
+                    mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
+                    mediaRequest.addElement(postId);
+
+                    mediasQueue.addElement(mediaRequest);
+
                     synchronized (mediasQueue) {
-                        Vector mediaRequest = new Vector(3);
-
-                        mediaRequest.addElement(fileName);
-                        mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
-                        mediaRequest.addElement(postId);
-
-                        mediasQueue.addElement(mediaRequest);
                         mediasQueue.notify();
                     }
                 }
@@ -715,12 +744,6 @@ public class FeedCanvas extends Canvas {
 
         int selectedPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex));
         int scrolledHeight = scrollY + selectedY;
-//        ITD.log("ПРОСКРОЛЛЕНАЯ ВЫСОТА " + scrolledHeight);
-//        int otherScrolledHeight = 0;
-//        for (int postIndex = 0; postIndex < selectedIndex; postIndex++) {
-//            otherScrolledHeight += getPostHeight((JSONObject) elements.elementAt(postIndex));
-//        }
-//        ITD.log("REAL SHIT ПРОСКРОЛЛЕНАЯ ВЫСОТА " + otherScrolledHeight);
 
         if (action == UP) {
             onUp(selectedPostHeight, scrolledHeight);
@@ -756,7 +779,7 @@ public class FeedCanvas extends Canvas {
         }
 
         scrollY -= y - touchY;
-        scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW);
+        scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW - screenHeight);
 
         int dPrev = prevTouchY - touchY;
         int dNow = touchY - y;
@@ -772,40 +795,50 @@ public class FeedCanvas extends Canvas {
 
 
     protected void pointerReleased(int x, int y) {
-        if (!isPressed) {
+        ITD.log("ОТПУСТИЕ НАЖАТИЯ " + x + " " + y);
+        if (isDragged) {
             isDragged = false;
 
             int deltaTouchY = startTouchY - y;
             long deltaTime = System.currentTimeMillis() - startTouchTime;
-            float velocityCoef = (float)deltaTouchY / (float)deltaTime;
-            if (Math.abs(velocityCoef) > 1.5) inertialScroll(velocityCoef);
-
-            return;
+            float velocityCoef = (float)deltaTouchY / deltaTime;
+            if (Math.abs(velocityCoef) > SCROLL_THRESHOLD && Math.abs(deltaTouchY) > SCROLL_MIN_MOVE) {
+                float scrollMaxCoef = velocityCoef >= 0 ? SCROLL_MAX_COEF : -SCROLL_MAX_COEF;
+                velocityCoef = Math.abs(velocityCoef) > SCROLL_MAX_COEF ? scrollMaxCoef : velocityCoef;
+//                setTitle(Math.abs(velocityCoef) + "/" + Math.abs(deltaTouchY) + "/" + Math.abs(deltaTime));
+                inertialScroll(velocityCoef);
+            }
         }
-        ITD.log("ОТПУСТИЕ НАЖАТИЯ " + x + " " + y);
+        else {
+            isPressed = false;
 
-        Enumeration likeHbEnumKeys = likesHitboxes.keys();
-        while (likeHbEnumKeys.hasMoreElements()) {
-            int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
-            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
-                ITD.log("Отправка лайка");
-                likePost((JSONObject) likesHitboxes.get(c));
-                break;
+            Enumeration likeHbEnumKeys = likesHitboxes.keys();
+            while (likeHbEnumKeys.hasMoreElements()) {
+                int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
+                if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                    ITD.log("Отправка лайка");
+                    likePost((JSONObject) likesHitboxes.get(c));
+                    break;
+                }
             }
         }
     }
 
 
     void inertialScroll(final float coef) {
+        scrollThread.interrupt();
         scrollThread = new Thread(new Runnable() {
             public void run() {
                 float velocity = (float)SCROLL_VELOCITY * coef;
-                while (Math.abs(velocity) > 2) {
-                    scrollY += (int) velocity;
-                    scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW);
-                    velocity *= SCROLL_SLOWDOWN_COEF;
+                while (Math.abs(velocity) > SCROLL_END) {
+                    scrollY = Math.min(Math.max(scrollY + (int) velocity, 0), elementsHeight + SCROLL_OVERFLOW - screenHeight);
+                    if (scrollY == 0 || scrollY == elementsHeight + SCROLL_OVERFLOW - screenHeight) break;
+
+                    velocity *= (float) SCROLL_SLOWDOWN_COEF;
+
                     repaint();
-                    try { Thread.sleep(1000/SCROLL_FRAMERATE); } catch (InterruptedException ignored) {}
+                    try { Thread.sleep(1000/SCROLL_FRAMERATE); }
+                    catch (Exception ignored) { break; }
                 }
             }
         });
@@ -816,39 +849,51 @@ public class FeedCanvas extends Canvas {
     void likePost() {
         JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
         boolean isLiked = post.getBoolean("isLiked");
-        isLiked = !isLiked;
 
-        String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
-        if (isLiked) {
-            ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
-        }
-        else {
-            ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
-        }
+        isLiked = !isLiked;
 
         post.put("isLiked", isLiked);
         elements.setElementAt(post, selectedIndex);
 
         repaint();
+
+        final boolean finalIsLiked = isLiked;
+        final String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
+        new Thread(new Runnable() {
+            public void run() {
+                if (finalIsLiked) {
+                    ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+                else {
+                    ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+            }
+        }).start();
     }
 
 
     void likePost(JSONObject post) {
         boolean isLiked = post.getBoolean("isLiked");
-        isLiked = !isLiked;
 
-        String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
-        if (isLiked) {
-            ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
-        }
-        else {
-            ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
-        }
+        isLiked = !isLiked;
 
         post.put("isLiked", isLiked);
         elements.setElementAt(post, selectedIndex);
 
         repaint();
+
+        final boolean finalIsLiked = isLiked;
+        final String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
+        new Thread(new Runnable() {
+            public void run() {
+                if (finalIsLiked) {
+                    ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+                else {
+                    ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+            }
+        }).start();
     }
 
 
@@ -893,15 +938,19 @@ public class FeedCanvas extends Canvas {
             }
             ITD.log(selectedPostHeight);
         }
-        else if (selectedPostHeight > screenHeight) { // если последний пост и он выше чем экран
-            if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
-                scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
-                ITD.log("scroll down state 7");
+        else {
+            if (selectedPostHeight > screenHeight) { // если последний пост и он выше чем экран
+                if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
+                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
+                    ITD.log("scroll down state 7");
+                }
+                else {
+                    scrollY += SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
+                    ITD.log("scroll down state 8");
+                }
             }
-            else {
-                scrollY += SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
-                ITD.log("scroll down state 8");
-            }
+
+            requestPosts(); //запрашиваем ещё постов
         }
     }
 
@@ -1064,6 +1113,7 @@ public class FeedCanvas extends Canvas {
         avatarLoader.interrupt();
         mediaLoader.interrupt();
         postLoader.interrupt();
+        scrollThread.interrupt();
         setCommandListener(null);
         removeCommand(midlet.backToMenuCmd);
         removeNontouchCmds();
