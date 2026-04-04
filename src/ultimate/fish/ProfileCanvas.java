@@ -38,7 +38,7 @@ public class ProfileCanvas extends FeedCanvas {
         initIcons();
 
         initAvatarLoader();
-//        initMediaLoader();
+        initMediaLoader();
         initPostLoader();
 
         getHeaderSize();
