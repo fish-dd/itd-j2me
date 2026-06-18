@@ -76,6 +76,7 @@ public class FeedCanvas extends Canvas {
     Image viewIcon;
     Image repostIcon;
     Image verifiedIcon;
+    Image moreIcon;
 
     int headerHeight = 0;
 
@@ -136,12 +137,7 @@ public class FeedCanvas extends Canvas {
         repostMediaWidth = screenWidth - PADDING*4 - 2;
 
         iconSize = midlet.iconSize;
-        if (lineHeight <= ITD.FONT_THRESHOLD[0]) {
-            avatarSize = 32;
-        }
-        else {
-            avatarSize = 64;
-        }
+        avatarSize = midlet.avatarSize;
         minPostHeight = avatarSize + PADDING*2;
     }
 
@@ -162,11 +158,12 @@ public class FeedCanvas extends Canvas {
             viewIcon = midlet.getIcon("view");
             repostIcon = midlet.getIcon("repost");
             verifiedIcon = midlet.getIcon("verified");
+            moreIcon = midlet.getIcon("three_dots");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
     }
 
 
-    private void initCommands() {
+    void initCommands() {
         setCommandListener(midlet.feedCmdListener);
         addCommand(midlet.backToMenuCmd);
         if (showSelection) {
@@ -372,8 +369,8 @@ public class FeedCanvas extends Canvas {
                         } catch (Exception e) { ITD.log(String.valueOf(e)); }
                     }
 
-                    loadPosts(ITD.POSTS_LIMIT, cursor);
-                    cursor++;
+                    boolean loadStatus = loadPosts(ITD.POSTS_LIMIT, cursor);
+                    if (loadStatus) cursor++;
                     repaint();
                     arePostsRequested = false;
                 }
@@ -385,7 +382,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    private void loadPosts(int postsLimit, int cursor) {
+    private boolean loadPosts(int postsLimit, int cursor) {
         try {
             midlet.startPrintln("Получение постов...");
             String url = URL_PARTS[0] + postsLimit + URL_PARTS[1];
@@ -395,13 +392,19 @@ public class FeedCanvas extends Canvas {
             midlet.startPrintln("Парсинг JSON...");
             JSONObject json = JSON.getObject(postsResponse);
             JSONArray posts = json.getObject("data").getArray("posts");
+            if (posts.isEmpty()) return false;
 
             midlet.startPrintln("Добавление элементов...");
             for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
                 elements.addElement(posts.get(postIndex));
             }
         }
-        catch (Exception ignored) { midlet.startPrintln("Произошла ошибка"); }
+        catch (Exception ignored) {
+            midlet.startPrintln("Произошла ошибка");
+            return false;
+        }
+
+        return true;
     }
 
 
@@ -585,6 +588,15 @@ public class FeedCanvas extends Canvas {
                 Graphics.TOP | Graphics.LEFT
         );
 
+//        if (!isRepost && hasPointerEvents()) {
+//            g.drawImage(
+//                    moreIcon,
+//                    screenWidth - PADDING - iconSize,
+//                    userDataY + (avatarSize - iconSize) / 2,
+//                    Graphics.TOP | Graphics.LEFT
+//            );
+//        }
+
         // Рисуем Текст поста
         g.setFont(fontPlain);
         g.setColor(COLOR_TEXT);
@@ -712,6 +724,16 @@ public class FeedCanvas extends Canvas {
                 metadataY,
                 Graphics.TOP | Graphics.LEFT
         );
+        int repostsWidth = iconSize + PADDING + strWidth(repostsStr, fontPlain);
+        //границы сенсорной кнопки лайка
+        if (hasPointerEvents()) {
+            repostsHitboxes.put(new int[] {
+                    PADDING*5 + likesWidth + commentsWidth,
+                    metadataY,
+                    PADDING*5 + likesWidth + commentsWidth + repostsWidth,
+                    metadataY + iconSize
+            }, post);
+        }
 
         //просмотры
         int viewsCount = post.getInt("viewsCount");
@@ -821,6 +843,16 @@ public class FeedCanvas extends Canvas {
                     break;
                 }
             }
+
+            Enumeration repostHbEnumKeys = repostsHitboxes.keys();
+            while (repostHbEnumKeys.hasMoreElements()) {
+                int[] c /*coords*/ = (int[]) repostHbEnumKeys.nextElement();
+                if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                    ITD.log("Запуск окна репоста");
+                    repostPost((JSONObject) repostsHitboxes.get(c));
+                    break;
+                }
+            }
         }
     }
 
@@ -846,8 +878,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void likePost() {
-        JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
+    void likePost(JSONObject post) {
         boolean isLiked = post.getBoolean("isLiked");
 
         isLiked = !isLiked;
@@ -872,28 +903,22 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void likePost(JSONObject post) {
-        boolean isLiked = post.getBoolean("isLiked");
+    void likePost() {
+        JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
+        likePost(post);
+    }
 
-        isLiked = !isLiked;
 
-        post.put("isLiked", isLiked);
-        elements.setElementAt(post, selectedIndex);
+    void repostPost(JSONObject post) {
+        String postId = post.getString("id");
+        String name = post.getObject("author").getString("displayName");
+        midlet.initWriter(REPOST, null, postId, name, this);
+    }
 
-        repaint();
 
-        final boolean finalIsLiked = isLiked;
-        final String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
-        new Thread(new Runnable() {
-            public void run() {
-                if (finalIsLiked) {
-                    ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
-                }
-                else {
-                    ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
-                }
-            }
-        }).start();
+    void repostPost() {
+        JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
+        repostPost(post);
     }
 
 
@@ -1123,11 +1148,13 @@ public class FeedCanvas extends Canvas {
     void addNontouchCmds() {
         addCommand(midlet.likeCmd);
         addCommand(midlet.selectCmd);
+        addCommand(midlet.repostCmd);
     }
 
 
     void removeNontouchCmds() {
         removeCommand(midlet.likeCmd);
         removeCommand(midlet.selectCmd);
+        removeCommand(midlet.repostCmd);
     }
 }

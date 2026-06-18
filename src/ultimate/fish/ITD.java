@@ -1,5 +1,7 @@
 package ultimate.fish;
 
+import cc.nnproject.json.JSONObject;
+
 import javax.microedition.io.Connector;
 import javax.microedition.io.HttpConnection;
 import javax.microedition.lcdui.*;
@@ -16,7 +18,7 @@ public class ITD extends MIDlet {
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
-    static String URL = URLS[3];
+    static String URL = URLS[0];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -32,14 +34,16 @@ public class ITD extends MIDlet {
     private Form tokenForm;
 
     private List menuList;
-    private String[] menuStrings = {"Для вас", /*"Лента клана", "Подписки",*/ "Поиск", "Уведомления", "Профиль", "Настройки"};
+    private String[] menuStrings = {"Для вас", /*"Лента клана", "Подписки",*/ "Поиск", "Новый пост", "Уведомления", "Профиль", "Настройки"};
     //иконки
     //google material symbols, Apache License, Version 2.0
     //size 16, weight 400, grade -25, optical size 20, #E4E6E8
+    //size 32, weight 400, grade -25, optical size 40, #E4E6E8
     private Image feedIcon;
     private Image clanIcon;
     private Image followsIcon;
     private Image searchIcon;
+    private Image plusIcon;
     private Image notificationsIcon;
     private Image profileIcon;
     private Image settingsIcon;
@@ -53,6 +57,10 @@ public class ITD extends MIDlet {
     public CommandListener feedCmdListener;
     public Command backToMenuCmd;
     public Command likeCmd;
+    public Command repostCmd;
+
+    public CommandListener writerCmdListener;
+    public Command postCmd;
 
     public CommandListener settingsCmdListener;
 
@@ -64,9 +72,9 @@ public class ITD extends MIDlet {
     private RecordStore settingsRec;
 
     //связанное с масштабом
-    public static final int[] FONT_THRESHOLD = {17};
-    public int iconSize = 16;
-    public int avatarSize = 32;
+    public static final int[][] FONT_THRESHOLD = {{0, 16, 32}, {17, 32, 64}};
+    public int iconSize;
+    public int avatarSize;
 
 
     protected void startApp() {
@@ -87,11 +95,12 @@ public class ITD extends MIDlet {
         try {
             feedIcon = getIcon("home");
             searchIcon = getIcon("search");
+            plusIcon = getIcon("plus");
             notificationsIcon = getIcon("notifications");
             profileIcon = getIcon("account");
             settingsIcon = getIcon("settings");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
-        menuIcons = new Image[]{feedIcon, searchIcon, notificationsIcon, profileIcon, settingsIcon};
+        menuIcons = new Image[]{feedIcon, searchIcon, plusIcon, notificationsIcon, profileIcon, settingsIcon};
 
         initMenuList();
 
@@ -105,20 +114,16 @@ public class ITD extends MIDlet {
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         startPrintln("Попытка достучаться до прокси...");
-//        new Thread(new Runnable() {
-//            public void run() {
-                String connCode = "";
-                while (true) {
-                    connCode = getRequest(URL + "/ping");
+        String connCode;
+        while (true) {
+            connCode = getRequest(URL + "/ping");
 
-                    if (connCode != null && connCode.equals("pong")) break;
+            if (connCode != null && connCode.equals("pong")) break;
 
-                    ITD.log("Ошибка теста подключения, ждём");
-                    startPrintln("Ошибка теста подключения, ждём...");
-                    try { Thread.sleep(5000); } catch (Exception ignored1) {}
-                }
-//            }
-//        }).start();
+            ITD.log("Ошибка теста подключения, ждём");
+            startPrintln("Ошибка теста подключения, ждём...");
+            try { Thread.sleep(5000); } catch (Exception ignored1) {}
+        }
 
         startPrintln("Инициализация экрана ввода токена...");
         initTokenForm();
@@ -140,14 +145,20 @@ public class ITD extends MIDlet {
         selectCmd = new Command("Открыть", Command.ITEM, 1);
         aboutCmd = new Command("О программе", Command.SCREEN, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
+        repostCmd = new Command("Репост", Command.ITEM, 2);
         keyEnterCommand = new Command("Ввод", Command.OK, 1);
         keyRetryCommand = new Command("Повторить", Command.OK, 2);
+        postCmd = new Command("Опубликовать", Command.OK, 1);
 
         feedCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == likeCmd) {
                     FeedCanvas feed = ((FeedCanvas) displayable);
                     feed.likePost();
+                }
+                else if (command == repostCmd) {
+                    FeedCanvas feed = ((FeedCanvas) displayable);
+                    feed.repostPost();
                 }
                 else if (command == selectCmd) {
                     display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
@@ -167,10 +178,13 @@ public class ITD extends MIDlet {
                     if (menuList.isSelected(0)) {
                         initFeedCanvas();
                     }
-                    else if (menuList.isSelected(3)) {
-                        initProfileCanvas();
+                    else if (menuList.isSelected(2)) {
+                        initWriter();
                     }
                     else if (menuList.isSelected(4)) {
+                        initProfileCanvas();
+                    }
+                    else if (menuList.isSelected(5)) {
                         initSettingsForm();
                     }
                     else {
@@ -179,14 +193,7 @@ public class ITD extends MIDlet {
                 }
             }
         };
-        settingsCmdListener = new CommandListener() {
-            public void commandAction(Command command, Displayable displayable) {
-                if (command == backToMenuCmd) {
-                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                    display.setCurrent(menuList);
-                }
-            }
-        };
+        initSettingsCmds();
         aboutCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == backToMenuCmd) {
@@ -221,6 +228,78 @@ public class ITD extends MIDlet {
                 }
 
                 initTokenForm();
+            }
+        };
+        writerCmdListener = new CommandListener() {
+            public void commandAction(Command command, Displayable displayable) {
+                Writer writer = (Writer) displayable;
+
+                if (command == postCmd) {
+                    int type = writer.getType();
+                    String text = writer.getString();
+
+                    if (text.length() == 0) {
+                        display.setCurrent(new Alert("Пустой пост", null, null, AlertType.ERROR));
+                    }
+
+                    Alert sendingSplash = new Alert("Публикация...", null, null, AlertType.INFO);
+                    sendingSplash.setTimeout(Alert.FOREVER);
+                    sendingSplash.setIndicator(new Gauge(null, false, Gauge.INDEFINITE, Gauge.CONTINUOUS_RUNNING));
+                    display.setCurrent(sendingSplash);
+
+                    String url = null;
+                    String content = null;
+                    if (type == Writer.SELF) {
+                        url = API_URL + "/posts";
+
+                        JSONObject jsonContent = new JSONObject();
+                        jsonContent.put("content", text);
+                        content = jsonContent.toString();
+                    }
+                    else if (type == Writer.REPOST) {
+                        String postId = writer.getPostId();
+
+                        url = API_URL + "/posts/" + postId + "/repost";
+
+                        JSONObject jsonContent = new JSONObject();
+                        jsonContent.put("content", text);
+                        content = jsonContent.toString();
+
+                        Displayable targetScreen = writer.getTargetScreen();
+                        if (targetScreen instanceof FeedCanvas) {
+                            FeedCanvas targetScreenFC = (FeedCanvas) targetScreen;
+
+                            for (int elementIndex = 0; elementIndex < targetScreenFC.elements.size(); elementIndex++) {
+                                JSONObject element = (JSONObject) targetScreenFC.elements.elementAt(elementIndex);
+                                if (element.getString("id").equals(postId)) {
+                                    int repostsCount = element.getInt("repostsCount");
+                                    element.put("repostsCount",repostsCount + 1);
+                                    targetScreenFC.elements.setElementAt(element, elementIndex);
+                                }
+                            }
+
+                            targetScreenFC.repaint();
+                        }
+                    }
+                    else if (type == Writer.OTHER) {
+                        url = API_URL + "/posts";
+
+                        JSONObject jsonContent = new JSONObject();
+                        jsonContent.put("content", text);
+                        jsonContent.put("wallRecipientId", writer.getRecipientId());
+                        content = jsonContent.toString();
+                    }
+
+                    try {
+                        postRequest(url, content.getBytes("UTF-8"), refreshToken);
+                    } catch (UnsupportedEncodingException ignored) {}
+
+                    Displayable targetScreen = writer.getTargetScreen();
+                    display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
+                }
+                else if (command == backToMenuCmd) {
+                    display.setCurrent(menuList);
+                }
             }
         };
     }
@@ -439,9 +518,26 @@ public class ITD extends MIDlet {
         Form settingsForm = new Form("Настройки");
         settingsForm.setCommandListener(settingsCmdListener);
         settingsForm.addCommand(backToMenuCmd);
-        settingsForm.append("Тут будут настройки\n");
+
+        ChoiceGroup settingsGroup = new ChoiceGroup(null, Choice.MULTIPLE);
+        settingsGroup.append("", null);
+        settingsGroup.append("Прогружать посты по мере прокрутки", null);
+        settingsForm.append(settingsGroup);
+
         loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(settingsForm);
+    }
+
+
+    private void initSettingsCmds() {
+        settingsCmdListener = new CommandListener() {
+            public void commandAction(Command command, Displayable displayable) {
+                if (command == backToMenuCmd) {
+                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
+                    display.setCurrent(menuList);
+                }
+            }
+        };
     }
 
 
@@ -459,7 +555,7 @@ public class ITD extends MIDlet {
         aboutForm.append("by ultimate_fish\n");
 
         Image logoImg = null;
-        try { logoImg = getPNGRes("itd"); } catch (IOException ignored) {}
+        logoImg = getPNGRes("itd");
         ImageItem logo = new ImageItem(null, logoImg, Item.LAYOUT_CENTER, "Логотип");
         aboutForm.append(logo);
 
@@ -480,6 +576,23 @@ public class ITD extends MIDlet {
 
         loaderSleep(); //потому что j2me loader что? правильно
         display.setCurrent(aboutForm);
+    }
+
+
+    void initWriter(int type, String recipientId, String postId, String name, Displayable targetScreen) {
+        if (targetScreen == null) {
+            targetScreen = menuList;
+        }
+        Writer writer = new Writer(type, recipientId, postId, name, targetScreen);
+        writer.setCommandListener(writerCmdListener);
+        writer.addCommand(backToMenuCmd);
+        writer.addCommand(postCmd);
+        display.setCurrent(writer);
+    }
+
+
+    void initWriter() {
+        initWriter(Writer.SELF, null, null, null, null);
     }
 
 
@@ -516,8 +629,10 @@ public class ITD extends MIDlet {
     }
 
 
-    public static Image getPNGRes(String path) throws IOException {
-        return Image.createImage(Class.class.getResourceAsStream("/" + path + ".png"));
+    public static Image getPNGRes(String path) {
+        try {
+            return Image.createImage(Class.class.getResourceAsStream("/" + path + ".png"));
+        } catch (IOException e) { throw new RuntimeException(e.toString()); }
     }
 
 
@@ -530,9 +645,14 @@ public class ITD extends MIDlet {
 
     private void setIconSize() {
         int lineHeight = Font.getFont(Font.FACE_SYSTEM, Font.STYLE_PLAIN, Font.SIZE_SMALL).getHeight();
-        if (lineHeight > FONT_THRESHOLD[0]) {
-            iconSize = 32;
-            avatarSize = 64;
+        for (int i = 0; i < FONT_THRESHOLD.length; i++) {
+            if (lineHeight > FONT_THRESHOLD[i][0]) {
+                iconSize = FONT_THRESHOLD[i][1];
+                avatarSize = FONT_THRESHOLD[i][2];
+            }
+            else {
+                break;
+            }
         }
     }
 

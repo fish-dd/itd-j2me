@@ -3,7 +3,7 @@ package ultimate.fish;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
-public class Post {
+public class Repost {
     //общие параметры поста и репоста
     String id;
     String content;
@@ -23,15 +23,10 @@ public class Post {
     String dominantEmoji;
     String vs;
 
-    //только у поста
-    String authorId;
-    JSONObject originalPost;
-    JSONObject poll;
-    String wallRecipientId;
-    String editedAt;
-    int editedAgo; //кастомный параметр от прокси
+    //только у репоста
+    boolean isDeleted;
 
-    Post(JSONObject postJson) {
+    Repost(JSONObject postJson) {
         id = postJson.getString("id");
         content = postJson.getString("content");
         spans = postJson.getArray("spans");
@@ -39,7 +34,6 @@ public class Post {
         commentsCount = postJson.getInt("commentsCount");
         repostsCount = postJson.getInt("repostsCount");
         viewsCount = postJson.getInt("viewsCount");
-        authorId = postJson.getString("authorId");
         createdAt = postJson.getString("createdAt");
         createdAgo = postJson.getInt("createdAgo");
         author = postJson.getObject("author");
@@ -48,12 +42,8 @@ public class Post {
         isReposted = postJson.getBoolean("isReposted");
         isOwner = postJson.getBoolean("isOwner");
         isViewed = postJson.getBoolean("isViewed");
-        originalPost = postJson.getObject("originalPost");
         dominantEmoji = postJson.getString("dominantEmoji");
         vs = postJson.getString("vs");
-        poll = postJson.getNullableObject("poll");
-        wallRecipientId = postJson.getString("wallRecipientId");
-        editedAt = postJson.getString("editedAt");
-        editedAgo = postJson.getInt("editedAgo");
+        isDeleted = postJson.getBoolean("isDeleted");
     }
 }
