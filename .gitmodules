@@ -1,0 +1,3 @@
+[submodule "libs/NNJSON"]
+	path = libs/NNJSON
+	url = https://github.com/shinovon/NNJSON.git

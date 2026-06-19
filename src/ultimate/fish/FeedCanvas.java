@@ -60,7 +60,7 @@ public class FeedCanvas extends Canvas {
     static final int COLOR_TEXT = 0xE4E6E8;
     static final int COLOR_SEL = 0x242424;
     static final int COLOR_LOADING = 0x323232;
-    static final int COLOR_POST_REQUEST_NOTIFY = 0x58BED1; //второй рандом цвет из пипетка кста, первый был #FC64C1
+    static final int COLOR_POST_REQUEST_NOTIFY = 0x58BED1; //второй рандом цвет из пипетки кста, первый был #FC64C1
     static final int COLOR_NUKSTA = 0x4FC3F7;
     static final float MAX_MEDIA_RATIO = 3f;
 
