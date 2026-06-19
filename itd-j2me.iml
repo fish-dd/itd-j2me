@@ -1,13 +1,14 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <module type="JAVA_MODULE" version="4">
-  <component LANGUAGE_LEVEL="JDK_1_3" inherit-compiler-output="true" name="NewModuleRootManager">
-    <exclude-output/>
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_1_3" inherit-compiler-output="true">
+    <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder isTestSource="false" url="file://$MODULE_DIR$/src"/>
-      <sourceFolder type="java-resource" url="file://$MODULE_DIR$/res"/>
-      <excludeFolder url="file://$MODULE_DIR$/deployed"/>
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/res" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/libs/NNJSON/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/deployed" />
     </content>
-    <orderEntry type="inheritedJdk"/>
-    <orderEntry forTests="false" type="sourceFolder"/>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>
