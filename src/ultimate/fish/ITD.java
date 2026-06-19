@@ -18,7 +18,7 @@ public class ITD extends MIDlet {
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
-    static String URL = URLS[0];
+    static String URL = URLS[2];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -184,11 +184,11 @@ public class ITD extends MIDlet {
                     else if (menuList.isSelected(4)) {
                         initProfileCanvas();
                     }
-                    else if (menuList.isSelected(5)) {
-                        initSettingsForm();
-                    }
+//                    else if (menuList.isSelected(5)) {
+//                        initSettingsForm();
+//                    }
                     else {
-                        display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
+                        display.setCurrent(new Alert("Ещё не реализовано", ":(", null, AlertType.WARNING));
                     }
                 }
             }
@@ -233,6 +233,7 @@ public class ITD extends MIDlet {
         writerCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 Writer writer = (Writer) displayable;
+                Displayable targetScreen = writer.getTargetScreen();
 
                 if (command == postCmd) {
                     int type = writer.getType();
@@ -265,7 +266,6 @@ public class ITD extends MIDlet {
                         jsonContent.put("content", text);
                         content = jsonContent.toString();
 
-                        Displayable targetScreen = writer.getTargetScreen();
                         if (targetScreen instanceof FeedCanvas) {
                             FeedCanvas targetScreenFC = (FeedCanvas) targetScreen;
 
@@ -294,11 +294,10 @@ public class ITD extends MIDlet {
                         postRequest(url, content.getBytes("UTF-8"), refreshToken);
                     } catch (UnsupportedEncodingException ignored) {}
 
-                    Displayable targetScreen = writer.getTargetScreen();
                     display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
                 }
                 else if (command == backToMenuCmd) {
-                    display.setCurrent(menuList);
+                    display.setCurrent(targetScreen);
                 }
             }
         };

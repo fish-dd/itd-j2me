@@ -74,9 +74,8 @@ public class ProfileCanvas extends FeedCanvas {
                     }
 
                     loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
-                    repaint();
                     arePostsRequested = false;
-
+                    repaint();
                 } while (!isNoMorePosts);
             }
         });
@@ -166,6 +165,18 @@ public class ProfileCanvas extends FeedCanvas {
         elementsHeight = elementsHeightTemp;
 
         if (scrollY + screenHeight > elementsHeight) requestPosts();
+        if (arePostsRequested) {
+            String notification = "Прогрузка постов...";
+            g.setColor(COLOR_POST_REQUEST_NOTIFY);
+            int notifyWidth = strWidth(notification, fontBold);
+            g.setFont(fontBold);
+            g.drawString(
+                    notification,
+                    (screenWidth - notifyWidth) / 2,
+                    PADDING*2,
+                    Graphics.TOP | Graphics.LEFT
+            );
+        }
     }
 
 

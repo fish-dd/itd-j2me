@@ -34,7 +34,7 @@ public class FeedCanvas extends Canvas {
 
     final Object postLoadNotifier = new Object();
     Thread postLoader;
-    int cursor = 2;
+    int cursor = 0;
     boolean arePostsRequested = false;
 
     Vector elements = new Vector();
@@ -60,6 +60,8 @@ public class FeedCanvas extends Canvas {
     static final int COLOR_TEXT = 0xE4E6E8;
     static final int COLOR_SEL = 0x242424;
     static final int COLOR_LOADING = 0x323232;
+    static final int COLOR_POST_REQUEST_NOTIFY = 0x58BED1; //второй рандом цвет из пипетка кста, первый был #FC64C1
+    static final int COLOR_NUKSTA = 0x4FC3F7;
     static final float MAX_MEDIA_RATIO = 3f;
 
     static final int SCROLL_HEIGHT = 100;
@@ -118,7 +120,7 @@ public class FeedCanvas extends Canvas {
         initMediaLoader();
         initPostLoader();
 
-        loadPosts(ITD.POSTS_LIMIT, 0);
+        loadPosts(ITD.POSTS_LIMIT);
 
         initCommands();
 
@@ -369,10 +371,9 @@ public class FeedCanvas extends Canvas {
                         } catch (Exception e) { ITD.log(String.valueOf(e)); }
                     }
 
-                    boolean loadStatus = loadPosts(ITD.POSTS_LIMIT, cursor);
-                    if (loadStatus) cursor++;
-                    repaint();
+                    loadPosts(ITD.POSTS_LIMIT);
                     arePostsRequested = false;
+                    repaint();
                 }
             }
         });
@@ -382,7 +383,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    private boolean loadPosts(int postsLimit, int cursor) {
+    private boolean loadPosts(int postsLimit) {
         try {
             midlet.startPrintln("Получение постов...");
             String url = URL_PARTS[0] + postsLimit + URL_PARTS[1];
@@ -398,6 +399,11 @@ public class FeedCanvas extends Canvas {
             for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
                 elements.addElement(posts.get(postIndex));
             }
+            cursor = Integer.parseInt(
+                    json.getObject("data")
+                            .getObject("pagination")
+                            .getString("nextCursor")
+            );
         }
         catch (Exception ignored) {
             midlet.startPrintln("Произошла ошибка");
@@ -447,6 +453,18 @@ public class FeedCanvas extends Canvas {
         elementsHeight = elementsHeightTemp;
 
         if (scrollY + screenHeight > elementsHeight) requestPosts();
+        if (arePostsRequested) {
+            String notification = "Прогрузка постов...";
+            g.setColor(COLOR_POST_REQUEST_NOTIFY);
+            int notifyWidth = strWidth(notification, fontBold);
+            g.setFont(fontBold);
+            g.drawString(
+                    notification,
+                    (screenWidth - notifyWidth) / 2,
+                    PADDING*2,
+                    Graphics.TOP | Graphics.LEFT
+            );
+        }
     }
 
 
@@ -554,8 +572,9 @@ public class FeedCanvas extends Canvas {
 
         // Рисуем Имя автора
         String displayName = post.getObject("author").getString("displayName");
+        boolean hasNuksta = post.getObject("author").getBoolean("hasNuksta");
         g.setFont(fontBold);
-        g.setColor(COLOR_TEXT);
+        g.setColor(hasNuksta ? COLOR_NUKSTA : COLOR_TEXT);
         int userDataY = currentY + PADDING;
         g.drawString(
                 displayName,
