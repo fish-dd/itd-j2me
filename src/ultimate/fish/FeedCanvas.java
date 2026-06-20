@@ -10,7 +10,7 @@ import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
 
-public class FeedCanvas extends Canvas {
+public class FeedCanvas extends ScrollableCanvas {
     static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular", "&cursor="};
 
     ITD midlet;
@@ -20,7 +20,6 @@ public class FeedCanvas extends Canvas {
     Hashtable postsHeights = new Hashtable(); //высоты постов и отдельных медиа постов
     Hashtable repostsMediaHeights = new Hashtable(); //высоты репостов и отдельных медиа репостов
     int elementsHeightTemp;
-    int elementsHeight;
 
     Vector viewedPosts = new Vector();
 
@@ -38,14 +37,6 @@ public class FeedCanvas extends Canvas {
     int cursor = 0;
     boolean arePostsRequested = false;
 
-    Vector elements = new Vector();
-
-    // Параметры UI
-    int scrollY = 0;         // Смещение прокрутки по вертикали
-    int selectedY = 0;
-    int selectedIndex = 0;   // Индекс выбранного поста
-    int screenWidth;
-    int screenHeight;
     int avatarSize;
     int iconSize;
     int minPostHeight;
@@ -64,8 +55,6 @@ public class FeedCanvas extends Canvas {
     static final int COLOR_POST_REQUEST_NOTIFY = 0x58BED1; //второй рандом цвет из пипетки кста, первый был #FC64C1
     static final int COLOR_NUKSTA = 0x4FC3F7;
     static final float MAX_MEDIA_RATIO = 3f;
-
-    static final int SCROLL_HEIGHT = 100;
 
     int postMediaWidth;
     int repostMediaWidth;
@@ -87,30 +76,13 @@ public class FeedCanvas extends Canvas {
     static final int REPOST = 1;
     static final int BANNER = 2;
 
-    static final double SCROLL_SLOWDOWN_COEF = 0.8;
-    static final double SCROLL_THRESHOLD = 0.7;
-    static final double SCROLL_VELOCITY = 50;
-    static final double SCROLL_END = 2;
-    static final float SCROLL_MAX_COEF = 5f;
-    static final int SCROLL_OVERFLOW = 16;
-    static final int SCROLL_FRAMERATE = 30;
-    static final int SCROLL_MIN_MOVE = 80;
-    Thread scrollThread = new Thread();
-    boolean showSelection;
-    boolean isPressed = false;
-    boolean isDragged = false;
-    int touchY;
-    int prevTouchY;
-    int startTouchY;
-    long startTouchTime;
-
     Hashtable likesHitboxes;
     Hashtable repostsHitboxes;
 
 
     public FeedCanvas(ITD midlet) {
+        super();
         this.midlet = midlet;
-        this.showSelection = !hasPointerEvents();
 
         setFullScreenMode(false);
         initFonts();
@@ -175,7 +147,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    int getPostHeight(JSONObject post) {
+    protected int getElementHeight(JSONObject post) {
         String postId = post.getString("id");
 
         if (postsHeights.containsKey(postId)) {
@@ -451,7 +423,7 @@ public class FeedCanvas extends Canvas {
 
         elementsHeight = elementsHeightTemp;
 
-        if (scrollY + screenHeight > elementsHeight) requestPosts();
+        if (scrollY + screenHeight >= elementsHeight) requestPosts();
         if (arePostsRequested) {
             String notification = "Прогрузка постов...";
             g.setColor(COLOR_POST_REQUEST_NOTIFY);
@@ -479,7 +451,7 @@ public class FeedCanvas extends Canvas {
             postsStrings.put(id, content);
         }
 
-        int postHeight = getPostHeight(post);
+        int postHeight = getElementHeight(post);
         elementsHeightTemp += postHeight;
 
         // Оптимизация: Рисуем, только если пост попадает в экран
@@ -779,145 +751,44 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    protected void keyPressed(int keyCode) { //обработка нажатий клавиш
-        if (!showSelection) {
-            showSelection = true;
-            addNontouchCmds();
-            repaint();
-            return;
-        }
-
-        int action = getGameAction(keyCode);
-
-        int selectedPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex));
-        int scrolledHeight = scrollY + selectedY;
-
-        if (action == UP) {
-            onUp(selectedPostHeight, scrolledHeight);
-        }
-        else if (action == DOWN) {
-            onDown(selectedPostHeight, scrolledHeight, elements.size());
-        }
-
-        // Обязательно вызываем перерисовку после изменений!
-        ITD.log(scrollY);
-        repaint();
-    }
-
-
-    protected void pointerPressed(int x, int y) {
-        ITD.log("НАЖАТИЕ " + x + " " + y);
-        scrollThread.interrupt();
-        isPressed = true;
-        removeNontouchCmds();
-        showSelection = false;
-    }
-
-
-    protected void pointerDragged(int x, int y) {
-        isPressed = false;
-        if (!isDragged) {
-            scrollThread.interrupt();
-            isDragged = true;
-            removeNontouchCmds();
-            showSelection = false;
-            touchY = prevTouchY = startTouchY = y;
-            startTouchTime = System.currentTimeMillis();
-        }
-
-        scrollY -= y - touchY;
-        scrollY = Math.min(Math.max(scrollY, 0), elementsHeight + SCROLL_OVERFLOW - screenHeight);
-
-        int dPrev = prevTouchY - touchY;
-        int dNow = touchY - y;
-        if (Math.abs(dPrev) + Math.abs(dNow) != Math.abs(dPrev + dNow)) {
-            touchY = prevTouchY = startTouchY = y;
-            startTouchTime = System.currentTimeMillis();
-        }
-
-        prevTouchY = touchY;
-        touchY = y;
-        repaint();
-    }
-
-
-    protected void pointerReleased(int x, int y) {
-        ITD.log("ОТПУСТИЕ НАЖАТИЯ " + x + " " + y);
-        if (isDragged) {
-            isDragged = false;
-
-            int deltaTouchY = startTouchY - y;
-            long deltaTime = System.currentTimeMillis() - startTouchTime;
-            float velocityCoef = (float)deltaTouchY / deltaTime;
-            if (Math.abs(velocityCoef) > SCROLL_THRESHOLD && Math.abs(deltaTouchY) > SCROLL_MIN_MOVE) {
-                float scrollMaxCoef = velocityCoef >= 0 ? SCROLL_MAX_COEF : -SCROLL_MAX_COEF;
-                velocityCoef = Math.abs(velocityCoef) > SCROLL_MAX_COEF ? scrollMaxCoef : velocityCoef;
-//                setTitle(Math.abs(velocityCoef) + "/" + Math.abs(deltaTouchY) + "/" + Math.abs(deltaTime));
-                inertialScroll(velocityCoef);
+    protected void hitBoxesCheck(int x, int y) {
+        Enumeration likeHbEnumKeys = likesHitboxes.keys();
+        while (likeHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
+            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                ITD.log("Отправка лайка");
+                likePost((JSONObject) likesHitboxes.get(c));
+                break;
             }
         }
-        else {
-            isPressed = false;
 
-            Enumeration likeHbEnumKeys = likesHitboxes.keys();
-            while (likeHbEnumKeys.hasMoreElements()) {
-                int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
-                if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
-                    ITD.log("Отправка лайка");
-                    likePost((JSONObject) likesHitboxes.get(c));
-                    break;
-                }
-            }
-
-            Enumeration repostHbEnumKeys = repostsHitboxes.keys();
-            while (repostHbEnumKeys.hasMoreElements()) {
-                int[] c /*coords*/ = (int[]) repostHbEnumKeys.nextElement();
-                if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
-                    ITD.log("Запуск окна репоста");
-                    repostPost((JSONObject) repostsHitboxes.get(c));
-                    break;
-                }
+        Enumeration repostHbEnumKeys = repostsHitboxes.keys();
+        while (repostHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) repostHbEnumKeys.nextElement();
+            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                ITD.log("Запуск окна репоста");
+                repostPost((JSONObject) repostsHitboxes.get(c));
+                break;
             }
         }
     }
 
 
-    void inertialScroll(final float coef) {
-        scrollThread.interrupt();
-        scrollThread = new Thread(new Runnable() {
-            public void run() {
-                float velocity = (float)SCROLL_VELOCITY * coef;
-                while (Math.abs(velocity) > SCROLL_END) {
-                    scrollY = Math.min(Math.max(scrollY + (int) velocity, 0), elementsHeight + SCROLL_OVERFLOW - screenHeight);
-                    if (scrollY == 0 || scrollY == elementsHeight + SCROLL_OVERFLOW - screenHeight) break;
-
-                    velocity *= (float) SCROLL_SLOWDOWN_COEF;
-
-                    repaint();
-                    try { Thread.sleep(1000/SCROLL_FRAMERATE); }
-                    catch (Exception ignored) { break; }
-                }
-            }
-        });
-        scrollThread.start();
-    }
-
-
-    void likePost(JSONObject post) {
+    void likePost(final JSONObject post) {
         boolean isLiked = post.getBoolean("isLiked");
-
         isLiked = !isLiked;
-
         post.put("isLiked", isLiked);
-        elements.setElementAt(post, selectedIndex);
+
+        int likesCount = post.getInt("likesCount");
+        post.put("likesCount", isLiked ? likesCount + 1 : likesCount - 1);
 
         repaint();
 
-        final boolean finalIsLiked = isLiked;
+        final boolean fIsLiked = isLiked;
         final String url = ITD.API_URL + "/posts/" + post.getString("id") + "/like";
         new Thread(new Runnable() {
             public void run() {
-                if (finalIsLiked) {
+                if (fIsLiked) {
                     ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
                 }
                 else {
@@ -944,118 +815,6 @@ public class FeedCanvas extends Canvas {
     void repostPost() {
         JSONObject post = (JSONObject) elements.elementAt(selectedIndex);
         repostPost(post);
-    }
-
-
-    void onDown(int selectedPostHeight, int scrolledHeight, int postsAmount) {
-        if (selectedIndex < postsAmount - 1) { // если не последний пост
-            int nextPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex + 1));
-
-            // Логика "умного" скролла вниз
-            if (selectedPostHeight > screenHeight) { // если текущий пост выше чем экран
-                if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) { // если самый конец поста
-                    if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
-                        selectedIndex++;
-                        scrollY = scrolledHeight + selectedPostHeight; // прокрутить в самое начало следующего поста
-                        ITD.log("scroll down state 1");
-                    }
-                    else {
-                        selectedIndex++;
-                        scrollY = scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight; // прокрутить в конец следующего поста
-                        ITD.log("scroll down state 2");
-                    }
-                }
-                else if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
-                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
-                    ITD.log("scroll down state 3");
-                }
-                else {
-                    scrollY += SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
-                    ITD.log("scroll down state 4");
-                }
-            }
-            else {
-                if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
-                    selectedIndex++;
-                    scrollY = scrolledHeight + selectedPostHeight; // прокрутить в начало следующего поста
-                    ITD.log("scroll down state 5");
-                }
-                else {
-                    selectedIndex++;
-                    scrollY = Math.max(scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight, 0); // прокрутить в конец следующего поста, ограничение чтобы не уезжать за верх
-                    ITD.log("scroll down state 6");
-                }
-            }
-            ITD.log(selectedPostHeight);
-        }
-        else {
-            if (selectedPostHeight > screenHeight) { // если последний пост и он выше чем экран
-                if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
-                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
-                    ITD.log("scroll down state 7");
-                }
-                else {
-                    scrollY += SCROLL_HEIGHT; // прокрутить на значение прокрутки вниз
-                    ITD.log("scroll down state 8");
-                }
-            }
-
-            requestPosts(); //запрашиваем ещё постов
-        }
-    }
-
-
-    void onUp(int selectedPostHeight, int scrolledHeight) {
-        if (selectedIndex > 0) {
-            int prevPostHeight = getPostHeight((JSONObject) elements.elementAt(selectedIndex - 1));
-
-            // Логика "умного" скролла вверх
-            if (selectedPostHeight > screenHeight) {
-                if (scrollY == scrolledHeight) {
-                    if (prevPostHeight > screenHeight) {
-                        selectedIndex--;
-                        scrollY = scrolledHeight - screenHeight;
-                        ITD.log("scroll up state 1");
-                    }
-                    else {
-                        selectedIndex--;
-                        scrollY = scrolledHeight - prevPostHeight;
-                        ITD.log("scroll up state 2");
-                    }
-                }
-                else if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
-                    scrollY = scrolledHeight;
-                    ITD.log("scroll up state 3");
-                }
-                else {
-                    scrollY = scrollY - SCROLL_HEIGHT;
-                    ITD.log("scroll up state 4");
-                }
-            }
-            else {
-                if (prevPostHeight > screenHeight) {
-                    selectedIndex--;
-                    scrollY = scrolledHeight - screenHeight;
-                    ITD.log("scroll up state 5");
-                }
-                else {
-                    selectedIndex--;
-                    scrollY = Math.max(Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedPostHeight - screenHeight), 0);
-                    ITD.log("scroll up state 6");
-                }
-            }
-            ITD.log(selectedPostHeight);
-        }
-        else if (selectedPostHeight > screenHeight) {
-            if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
-                scrollY = scrolledHeight;
-                ITD.log("scroll up state 7");
-            }
-            else {
-                scrollY = scrollY - SCROLL_HEIGHT;
-                ITD.log("scroll up state 8");
-            }
-        }
     }
 
 
@@ -1171,14 +930,14 @@ public class FeedCanvas extends Canvas {
     }
 
 
-    void addNontouchCmds() {
+    protected void addNontouchCmds() {
         addCommand(midlet.likeCmd);
         addCommand(midlet.selectCmd);
         addCommand(midlet.repostCmd);
     }
 
 
-    void removeNontouchCmds() {
+    protected void removeNontouchCmds() {
         removeCommand(midlet.likeCmd);
         removeCommand(midlet.selectCmd);
         removeCommand(midlet.repostCmd);
