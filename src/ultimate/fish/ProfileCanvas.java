@@ -100,13 +100,19 @@ public class ProfileCanvas extends FeedCanvas {
 
 
     private void loadPosts(String profileUrl, final int postsLimit, String cursor) {
-        String profileResponse = ITD.getRequest(profileUrl,  midlet.getRefreshToken());
+        String profileResponse;
+        do {
+            profileResponse = ITD.getRequest(profileUrl,  midlet.getRefreshToken());
+        } while (profileResponse == null || profileResponse.length() == 0);
         profile = JSON.getObject(profileResponse);
 
         String username = profile.getString("username");
         String postsUrl = URL_PARTS[0] + username + URL_PARTS[1] + postsLimit + URL_PARTS[2];
         if (cursor != null) postsUrl += URL_PARTS[3] + cursor;
-        String postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken());
+        String postsResponse;
+        do {
+            postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken());
+        } while (postsResponse == null || postsResponse.length() == 0);
         JSONArray posts = JSON.getObject(postsResponse).getObject("data").getArray("posts");
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
@@ -195,10 +201,13 @@ public class ProfileCanvas extends FeedCanvas {
                 String fileName = ITD.getFileName(bannerUrl);
 
                 if (medias.containsKey("banner")) {
-                    Image banner = (Image) medias.get("banner");
-                    g.drawImage(banner, 0, currentY, Graphics.TOP | Graphics.LEFT);
+                    if (medias.get("banner") != requestMarker) {
+                        Image banner = (Image) medias.get("banner");
+                        g.drawImage(banner, 0, currentY, Graphics.TOP | Graphics.LEFT);
+                    }
                 }
                 else {
+                    medias.put("banner", requestMarker);
                     synchronized (mediasQueue) {
                         Vector mediaRequest = new Vector();
 

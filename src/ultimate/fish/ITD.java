@@ -11,7 +11,7 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 

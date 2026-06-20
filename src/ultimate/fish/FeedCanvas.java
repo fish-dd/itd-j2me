@@ -25,12 +25,13 @@ public class FeedCanvas extends Canvas {
     Vector viewedPosts = new Vector();
 
     Hashtable avatars = new Hashtable();
-    Vector avatarsQueue = new Vector();
+    final Vector avatarsQueue = new Vector();
     Thread avatarLoader;
 
     Hashtable medias = new Hashtable();
-    Vector mediasQueue = new Vector();
+    final Vector mediasQueue = new Vector();
     Thread mediaLoader;
+    final Object requestMarker = new Object();
 
     final Object postLoadNotifier = new Object();
     Thread postLoader;
@@ -261,6 +262,7 @@ public class FeedCanvas extends Canvas {
                         }
                     }
 
+                    ITD.log("Запрос на медиа " + mediasQueue);
                     Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
                     String fileName = (String) mediaRequest.elementAt(0);
                     int type = ((Integer) mediaRequest.elementAt(1)).intValue();
@@ -283,9 +285,6 @@ public class FeedCanvas extends Canvas {
 
                                 Integer newPostHeight = new Integer(((Integer) postsHeights.get(postId)).intValue() + media.getHeight() - mediaHeight);
                                 postsHeights.put(postId, newPostHeight);
-
-                                repaint();
-                                return;
                             }
                         }
                         catch (Exception e) {
@@ -560,10 +559,13 @@ public class FeedCanvas extends Canvas {
         String emojiId = getEmojiId(emoji);
 
         if (avatars.containsKey(emojiId)) {
-            Image avatar = (Image) avatars.get(emojiId);
-            g.drawImage(avatar, PADDING + offset, currentY + PADDING, 0);
+            if (avatars.get(emojiId) != requestMarker) {
+                Image avatar = (Image) avatars.get(emojiId);
+                g.drawImage(avatar, PADDING + offset, currentY + PADDING, 0);
+            }
         }
         else {
+            avatars.put(emojiId, requestMarker); //маркер реквеста
             synchronized (avatarsQueue) {
                 avatarsQueue.addElement(emojiId);
                 avatarsQueue.notify();
@@ -644,14 +646,16 @@ public class FeedCanvas extends Canvas {
                         lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex);
 
                 if (medias.containsKey(fileName)) {
-                    Image media = (Image) medias.get(fileName);
+                    if (medias.get(fileName) != requestMarker) {
+                        Image media = (Image) medias.get(fileName);
 
-                    g.drawImage(
-                            media,
-                            PADDING + offset,
-                            mediaY,
-                            0
-                    );
+                        g.drawImage(
+                                media,
+                                PADDING + offset,
+                                mediaY,
+                                0
+                        );
+                    }
                 }
                 else {
                     g.setColor(COLOR_LOADING);
@@ -661,6 +665,8 @@ public class FeedCanvas extends Canvas {
                             isRepost ? repostMediaWidth : postMediaWidth,
                             mediaHeight
                     );
+
+                    medias.put(fileName, requestMarker); //маркер реквеста
 
                     Vector mediaRequest = new Vector(3);
 
@@ -1053,6 +1059,7 @@ public class FeedCanvas extends Canvas {
     }
 
 
+    //попросил нейронку вырезать слайсер из мпграма, но похоже на нейрослоп
     public static String[] split(String text, Font font, int maxWidth) {
         if (text == null || text.length() == 0) {
             return new String[0];
