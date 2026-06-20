@@ -36,7 +36,6 @@ public class ProfileCanvas extends FeedCanvas {
         initFonts();
         setScreenSize();
         initIcons();
-        initCommands();
 
         initAvatarLoader();
         initMediaLoader();
@@ -44,11 +43,12 @@ public class ProfileCanvas extends FeedCanvas {
 
         getHeaderSize();
         addHeader();
-
         loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
 
-        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
-        Display.getDisplay(midlet).setCurrent(this);
+        initCommands();
+
+//        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
+//        Display.getDisplay(midlet).setCurrent(this);
     }
 
 
@@ -68,9 +68,7 @@ public class ProfileCanvas extends FeedCanvas {
                     synchronized (postLoadNotifier) {
                         try {
                             postLoadNotifier.wait();
-                        } catch (Exception e) {
-                            ITD.log(String.valueOf(e));
-                        }
+                        } catch (Exception e) { ITD.log(String.valueOf(e)); }
                     }
 
                     loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
@@ -100,25 +98,24 @@ public class ProfileCanvas extends FeedCanvas {
 
 
     private void loadPosts(String profileUrl, final int postsLimit, String cursor) {
-        String profileResponse;
-        do {
-            profileResponse = ITD.getRequest(profileUrl,  midlet.getRefreshToken());
-        } while (profileResponse == null || profileResponse.length() == 0);
-        profile = JSON.getObject(profileResponse);
+        if (cursor == null) {
+            String profileResponse = ITD.getRequest(profileUrl, midlet.getRefreshToken(), true);
+            profile = JSON.getObject(profileResponse);
+        }
 
         String username = profile.getString("username");
         String postsUrl = URL_PARTS[0] + username + URL_PARTS[1] + postsLimit + URL_PARTS[2];
-        if (cursor != null) postsUrl += URL_PARTS[3] + cursor;
-        String postsResponse;
-        do {
-            postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken());
-        } while (postsResponse == null || postsResponse.length() == 0);
+        if (cursor != null) {
+            postsUrl += URL_PARTS[3] + cursor;
+        }
+        String postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken(), true);
+
         JSONArray posts = JSON.getObject(postsResponse).getObject("data").getArray("posts");
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
         }
 
-        if (posts.size() == 0) {
+        if (posts.isEmpty()) {
             ITD.log("Больше постов нет");
             isNoMorePosts = true;
         }

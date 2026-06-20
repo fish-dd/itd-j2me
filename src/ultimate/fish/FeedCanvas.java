@@ -363,7 +363,7 @@ public class FeedCanvas extends ScrollableCanvas {
             midlet.startPrintln("Получение постов...");
             String url = URL_PARTS[0] + postsLimit + URL_PARTS[1];
             if (cursor != 0) url += URL_PARTS[2] + cursor;
-            String postsResponse = ITD.getRequest(url, midlet.getRefreshToken());
+            String postsResponse = ITD.getRequest(url, midlet.getRefreshToken(), true);
 
             midlet.startPrintln("Парсинг JSON...");
             JSONObject json = JSON.getObject(postsResponse);
@@ -621,17 +621,15 @@ public class FeedCanvas extends ScrollableCanvas {
                 int mediaY = currentY + PADDING*(3+mediaIndex) + avatarSize +
                         lineHeight*content.length + heightsSum(attachments, mediaHeights, mediaIndex);
 
-                if (medias.containsKey(fileName)) {
-                    if (medias.get(fileName) != requestMarker) {
-                        Image media = (Image) medias.get(fileName);
+                if (medias.containsKey(fileName) && medias.get(fileName) != requestMarker) {
+                    Image media = (Image) medias.get(fileName);
 
-                        g.drawImage(
-                                media,
-                                PADDING + offset,
-                                mediaY,
-                                0
-                        );
-                    }
+                    g.drawImage(
+                            media,
+                            PADDING + offset,
+                            mediaY,
+                            0
+                    );
                 }
                 else {
                     g.setColor(COLOR_LOADING);
@@ -642,18 +640,20 @@ public class FeedCanvas extends ScrollableCanvas {
                             mediaHeight
                     );
 
-                    medias.put(fileName, requestMarker); //маркер реквеста
+                    if (!medias.containsKey(fileName)) {
+                        medias.put(fileName, requestMarker); //маркер реквеста
 
-                    Vector mediaRequest = new Vector(3);
+                        Vector mediaRequest = new Vector(3);
 
-                    mediaRequest.addElement(fileName);
-                    mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
-                    mediaRequest.addElement(postId);
+                        mediaRequest.addElement(fileName);
+                        mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
+                        mediaRequest.addElement(postId);
 
-                    mediasQueue.addElement(mediaRequest);
+                        mediasQueue.addElement(mediaRequest);
 
-                    synchronized (mediasQueue) {
-                        mediasQueue.notify();
+                        synchronized (mediasQueue) {
+                            mediasQueue.notify();
+                        }
                     }
                 }
             }

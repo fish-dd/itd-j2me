@@ -11,14 +11,14 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = true;
+    static final boolean DEBUG = false;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
-    static String URL = URLS[0];
+    static String URL = URLS[2];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -357,6 +357,38 @@ public class ITD extends MIDlet {
         }
         catch (Exception e) {
             log("Ошибка getRequest " + e);
+        }
+        return null;
+    }
+
+
+    static String getRequest(String url, String refreshToken, boolean retryOnFail) {
+        while (retryOnFail) {
+            try {
+                HttpConnection connection = (HttpConnection) Connector.open(url);
+                connection.setRequestMethod(HttpConnection.GET);
+                connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+
+                int code = connection.getResponseCode();
+                log(new Integer(code));
+                if (code == 200) {
+                    InputStream inputStream = connection.openInputStream();
+                    InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
+                    StringBuffer buffer = new StringBuffer();
+
+                    int answerChar;
+                    while ((answerChar = inputReader.read()) != -1) {
+                        buffer.append((char) answerChar);
+                    }
+
+                    final String response = buffer.toString();
+                    log(response);
+                    return response;
+                }
+            }
+            catch (Exception e) {
+                log("Ошибка getRequest " + e);
+            }
         }
         return null;
     }
