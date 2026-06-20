@@ -51,14 +51,14 @@ public abstract class ScrollableCanvas extends Canvas {
 
         int action = getGameAction(keyCode);
 
-        int selectedPostHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex));
+        int selectedElementHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex));
         int scrolledHeight = scrollY + selectedY;
 
         if (action == UP) {
-            onUp(selectedPostHeight, scrolledHeight);
+            onUp(selectedElementHeight, scrolledHeight);
         }
         else if (action == DOWN) {
-            onDown(selectedPostHeight, scrolledHeight, elements.size());
+            onDown(selectedElementHeight, scrolledHeight, elements.size());
         }
 
         // Обязательно вызываем перерисовку после изменений!
@@ -67,12 +67,12 @@ public abstract class ScrollableCanvas extends Canvas {
     }
 
 
-    void onUp(int selectedPostHeight, int scrolledHeight) {
+    void onUp(int selectedElementHeight, int scrolledHeight) {
         if (selectedIndex > 0) {
             int prevPostHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex - 1));
 
             // Логика "умного" скролла вверх
-            if (selectedPostHeight > screenHeight) {
+            if (selectedElementHeight > screenHeight) {
                 if (scrollY == scrolledHeight) {
                     if (prevPostHeight > screenHeight) {
                         selectedIndex--;
@@ -102,13 +102,13 @@ public abstract class ScrollableCanvas extends Canvas {
                 }
                 else {
                     selectedIndex--;
-                    scrollY = Math.max(Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedPostHeight - screenHeight), 0);
+                    scrollY = Math.max(Math.min(scrolledHeight - prevPostHeight, scrolledHeight + selectedElementHeight - screenHeight), 0);
                     ITD.log("scroll up state 6");
                 }
             }
-            ITD.log(selectedPostHeight);
+            ITD.log(selectedElementHeight);
         }
-        else if (selectedPostHeight > screenHeight) {
+        else if (selectedElementHeight > screenHeight) {
             if (scrollY - scrolledHeight < SCROLL_HEIGHT) {
                 scrollY = scrolledHeight;
                 ITD.log("scroll up state 7");
@@ -121,26 +121,26 @@ public abstract class ScrollableCanvas extends Canvas {
     }
 
 
-    void onDown(int selectedPostHeight, int scrolledHeight, int postsAmount) {
-        if (selectedIndex < postsAmount - 1) { // если не последний пост
+    void onDown(int selectedElementHeight, int scrolledHeight, int elementsAmount) {
+        if (selectedIndex < elementsAmount - 1) { // если не последний пост
             int nextPostHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex + 1));
 
             // Логика "умного" скролла вниз
-            if (selectedPostHeight > screenHeight) { // если текущий пост выше чем экран
-                if (scrollY + screenHeight == scrolledHeight + selectedPostHeight) { // если самый конец поста
+            if (selectedElementHeight > screenHeight) { // если текущий пост выше чем экран
+                if (scrollY + screenHeight == scrolledHeight + selectedElementHeight) { // если самый конец поста
                     if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
                         selectedIndex++;
-                        scrollY = scrolledHeight + selectedPostHeight; // прокрутить в самое начало следующего поста
+                        scrollY = scrolledHeight + selectedElementHeight; // прокрутить в самое начало следующего поста
                         ITD.log("scroll down state 1");
                     }
                     else {
                         selectedIndex++;
-                        scrollY = scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight; // прокрутить в конец следующего поста
+                        scrollY = scrolledHeight + selectedElementHeight + nextPostHeight - screenHeight; // прокрутить в конец следующего поста
                         ITD.log("scroll down state 2");
                     }
                 }
-                else if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
-                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
+                else if (scrolledHeight + selectedElementHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
+                    scrollY = scrolledHeight + selectedElementHeight - screenHeight; // докрутить до конца поста
                     ITD.log("scroll down state 3");
                 }
                 else {
@@ -151,21 +151,21 @@ public abstract class ScrollableCanvas extends Canvas {
             else {
                 if (nextPostHeight > screenHeight) { // если следующий пост выше экрана
                     selectedIndex++;
-                    scrollY = scrolledHeight + selectedPostHeight; // прокрутить в начало следующего поста
+                    scrollY = scrolledHeight + selectedElementHeight; // прокрутить в начало следующего поста
                     ITD.log("scroll down state 5");
                 }
                 else {
                     selectedIndex++;
-                    scrollY = Math.max(scrolledHeight + selectedPostHeight + nextPostHeight - screenHeight, 0); // прокрутить в конец следующего поста, ограничение чтобы не уезжать за верх
+                    scrollY = Math.max(scrolledHeight + selectedElementHeight + nextPostHeight - screenHeight, 0); // прокрутить в конец следующего поста, ограничение чтобы не уезжать за верх
                     ITD.log("scroll down state 6");
                 }
             }
-            ITD.log(selectedPostHeight);
+            ITD.log(selectedElementHeight);
         }
         else {
-            if (selectedPostHeight > screenHeight) { // если последний пост и он выше чем экран
-                if (scrolledHeight + selectedPostHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
-                    scrollY = scrolledHeight + selectedPostHeight - screenHeight; // докрутить до конца поста
+            if (selectedElementHeight > screenHeight) { // если последний пост и он выше чем экран
+                if (scrolledHeight + selectedElementHeight - (scrollY + screenHeight) < SCROLL_HEIGHT) { // если до низа поста осталось меньше чем значение прокрутки
+                    scrollY = scrolledHeight + selectedElementHeight - screenHeight; // докрутить до конца поста
                     ITD.log("scroll down state 7");
                 }
                 else {
@@ -173,13 +173,11 @@ public abstract class ScrollableCanvas extends Canvas {
                     ITD.log("scroll down state 8");
                 }
             }
-//возможно сработает и без реквестов
-//            requestPosts(); //запрашиваем ещё постов
         }
     }
 
 
-    protected abstract int getElementHeight(JSONObject jsonObject);
+    protected abstract int getElementHeight(Object object);
 
 
     protected void pointerPressed(int x, int y) {

@@ -147,16 +147,20 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    protected int getElementHeight(JSONObject post) {
-        String postId = post.getString("id");
+    protected int getElementHeight(Object object) {
+        if (object instanceof JSONObject) {
+            JSONObject post = (JSONObject) object;
+            String postId = post.getString("id");
 
-        if (postsHeights.containsKey(postId)) {
-            return ((Integer) postsHeights.get(postId)).intValue();
+            if (postsHeights.containsKey(postId)) {
+                return ((Integer) postsHeights.get(postId)).intValue();
+            }
+
+            int postHeight = calcPostHeight(post);
+            postsHeights.put(postId, new Integer(postHeight));
+            return postHeight;
         }
-
-        int postHeight = calcPostHeight(post);
-        postsHeights.put(postId, new Integer(postHeight));
-        return postHeight;
+        throw new IllegalArgumentException();
     }
 
 
