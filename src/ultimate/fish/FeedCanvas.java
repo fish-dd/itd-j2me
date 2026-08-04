@@ -78,6 +78,7 @@ public class FeedCanvas extends ScrollableCanvas {
 
     Hashtable likesHitboxes;
     Hashtable repostsHitboxes;
+    Hashtable commentsHitboxes;
 
 
     public FeedCanvas(ITD midlet) {
@@ -290,7 +291,7 @@ public class FeedCanvas extends ScrollableCanvas {
                     repaint();
                 }
             }
-        });
+        }, "mediaLoader");
 
         ITD.log("медиа поток запуск");
         mediaLoader.start();
@@ -328,7 +329,7 @@ public class FeedCanvas extends ScrollableCanvas {
                     repaint();
                 }
             }
-        });
+        }, "avatarLoader");
 
         ITD.log("аватар поток запуск");
         avatarLoader.start();
@@ -351,7 +352,7 @@ public class FeedCanvas extends ScrollableCanvas {
                     repaint();
                 }
             }
-        });
+        }, "postLoader");
 
         ITD.log("пост поток запуск");
         postLoader.start();
@@ -762,7 +763,7 @@ public class FeedCanvas extends ScrollableCanvas {
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Отправка лайка");
                 likePost((JSONObject) likesHitboxes.get(c));
-                break;
+                return;
             }
         }
 
@@ -772,9 +773,19 @@ public class FeedCanvas extends ScrollableCanvas {
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Запуск окна репоста");
                 repostPost((JSONObject) repostsHitboxes.get(c));
-                break;
+                return;
             }
         }
+
+//        Enumeration commentsHbEnumKeys = commentsHitboxes.keys();
+//        while (commentsHbEnumKeys.hasMoreElements()) {
+//            int[] c /*coords*/ = (int[]) commentsHbEnumKeys.nextElement();
+//            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+//                ITD.log("Запуск окна репоста");
+//                commentPost((JSONObject) repostsHitboxes.get(c));
+//                return;
+//            }
+//        }
     }
 
 
@@ -924,10 +935,14 @@ public class FeedCanvas extends ScrollableCanvas {
 
 
     public void stopFeed() {
-        avatarLoader.interrupt();
-        mediaLoader.interrupt();
         postLoader.interrupt();
+        ITD.log("postLoader");
+        avatarLoader.interrupt();
+        ITD.log("avatarLoader");
+        mediaLoader.interrupt();
+        ITD.log("mediaLoader");
         scrollThread.interrupt();
+        ITD.log("scrollLoader");
         setCommandListener(null);
         removeCommand(midlet.backToMenuCmd);
         removeNontouchCmds();

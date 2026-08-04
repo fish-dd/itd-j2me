@@ -11,14 +11,14 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
-    static String URL = URLS[2];
+    static String URL = URLS[0];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -64,7 +64,7 @@ public class ITD extends MIDlet {
 
     public CommandListener settingsCmdListener;
 
-    private String refreshToken = null;
+    private RefreshToken refreshToken;
 
     private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
     private RecordStore refreshTokenRec;
@@ -142,8 +142,8 @@ public class ITD extends MIDlet {
 
     private void initCommands() {
         backToMenuCmd = new Command("Назад", Command.BACK, 1);
-        selectCmd = new Command("Открыть", Command.ITEM, 1);
-        aboutCmd = new Command("О программе", Command.SCREEN, 2);
+        selectCmd = new Command("Открыть", Command.OK, 1);
+        aboutCmd = new Command("О программе", Command.HELP, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
         repostCmd = new Command("Репост", Command.ITEM, 2);
         keyEnterCommand = new Command("Ввод", Command.OK, 1);
@@ -164,8 +164,8 @@ public class ITD extends MIDlet {
                     display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
                 }
                 else if (command == backToMenuCmd) {
-                    display.setCurrent(menuList);
                     ((FeedCanvas) displayable).stopFeed();
+                    display.setCurrent(menuList);
                 }
             }
         };
@@ -193,7 +193,13 @@ public class ITD extends MIDlet {
                 }
             }
         };
-        initSettingsCmds();
+        settingsCmdListener = new CommandListener() {
+            public void commandAction(Command command, Displayable displayable) {
+                if (command == backToMenuCmd) {
+                    display.setCurrent(menuList);
+                }
+            }
+        };
         aboutCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
                 if (command == backToMenuCmd) {
@@ -304,70 +310,15 @@ public class ITD extends MIDlet {
     }
 
 
-    static String getRequest(String url) {
-        try {
-            HttpConnection connection = (HttpConnection) Connector.open(url);
-            connection.setRequestMethod(HttpConnection.GET);
-
-            int code = connection.getResponseCode();
-            if (code == 200) {
-                InputStream inputStream = connection.openInputStream();
-                InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
-                StringBuffer buffer = new StringBuffer();
-
-                int answerChar;
-                while ((answerChar = inputReader.read()) != -1) {
-                    buffer.append((char) answerChar);
-                }
-
-                final String response = buffer.toString();
-                log(response);
-                return response;
-            }
-        }
-        catch (Exception e) {
-            log("Ошибка getRequest " + e);
-        }
-        return null;
-    }
-
-
-    static String getRequest(String url, String refreshToken) {
-        try {
-            HttpConnection connection = (HttpConnection) Connector.open(url);
-            connection.setRequestMethod(HttpConnection.GET);
-            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
-
-            int code = connection.getResponseCode();
-            log(new Integer(code));
-            if (code == 200) {
-                InputStream inputStream = connection.openInputStream();
-                InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
-                StringBuffer buffer = new StringBuffer();
-
-                int answerChar;
-                while ((answerChar = inputReader.read()) != -1) {
-                    buffer.append((char) answerChar);
-                }
-
-                final String response = buffer.toString();
-                log(response);
-                return response;
-            }
-        }
-        catch (Exception e) {
-            log("Ошибка getRequest " + e);
-        }
-        return null;
-    }
-
-
     static String getRequest(String url, String refreshToken, boolean retryOnFail) {
-        while (retryOnFail) {
+        do {
+            log("Поток гет реквеста " + Thread.currentThread().getName());
             try {
                 HttpConnection connection = (HttpConnection) Connector.open(url);
                 connection.setRequestMethod(HttpConnection.GET);
-                connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+                if (refreshToken != null) {
+                    connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+                }
 
                 int code = connection.getResponseCode();
                 log(new Integer(code));
@@ -389,8 +340,18 @@ public class ITD extends MIDlet {
             catch (Exception e) {
                 log("Ошибка getRequest " + e);
             }
-        }
+        } while (retryOnFail);
         return null;
+    }
+
+
+    static String getRequest(String url, String refreshToken) {
+        return getRequest(url, refreshToken, false);
+    }
+
+
+    static String getRequest(String url) {
+        return getRequest(url, null, false);
     }
 
 
@@ -531,7 +492,7 @@ public class ITD extends MIDlet {
     private void initMenuList() {
         menuList = new List("Меню", List.IMPLICIT, menuStrings, menuIcons);
         menuList.setCommandListener(menuCmdListener);
-        menuList.addCommand(selectCmd);
+        menuList.setSelectCommand(selectCmd);
         menuList.addCommand(aboutCmd);
     }
 
@@ -557,18 +518,6 @@ public class ITD extends MIDlet {
 
         loaderSleep(); //потому что ж2ме лоудер крашится без этого
         display.setCurrent(settingsForm);
-    }
-
-
-    private void initSettingsCmds() {
-        settingsCmdListener = new CommandListener() {
-            public void commandAction(Command command, Displayable displayable) {
-                if (command == backToMenuCmd) {
-                    loaderSleep(); //потому что ж2ме лоудер крашится без этого
-                    display.setCurrent(menuList);
-                }
-            }
-        };
     }
 
 
