@@ -34,6 +34,10 @@ public class RefreshToken {
 
 
     void set(final String refreshToken) {
+        if (refreshToken == null) {
+            return;
+        }
+
         this.refreshToken = refreshToken;
 
         ITD.log("Запись токена в RMS...");
@@ -53,7 +57,17 @@ public class RefreshToken {
         }, "tokenWriter").start();
     }
 
+
     private void setRec(RecordStore rec) {
         this.rec = rec;
+    }
+
+
+    void close() {
+        try {
+            rec.closeRecordStore();
+        } catch (RecordStoreException e) {
+            ITD.log("Хранилище токена не закрылось: " + e.toString());
+        }
     }
 }

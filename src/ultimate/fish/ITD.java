@@ -11,14 +11,14 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = true;
+    static final boolean DEBUG = false;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 
     private Display display;
 
-    static String[] URLS = {"http://127.0.0.1:5000", "http://192.168.31.170", "http://ultimatefish.ddns.net:1740", "http://2.26.98.34:1740"};
-    static String URL = URLS[0];
+    static String[] URLS = {"http://127.0.0.1:5000", "http://ultimatefish.ddns.net:1740", "http://192.168.31.170", "http://2.26.98.34:1740"};
+    static String URL = URLS[1];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -64,11 +64,9 @@ public class ITD extends MIDlet {
 
     public CommandListener settingsCmdListener;
 
-    private RefreshToken refreshToken;
-
-    private final String REFRESH_TOKEN_RECORD_STORE_NAME = "itd-db";
-    private RecordStore refreshTokenRec;
-    private final String SETTINGS_RECORD_STORE_NAME = "itd-settings";
+    private final String REFRESH_TOKEN_REC_NAME = "itd-db";
+    private RefreshToken refreshToken = new RefreshToken(REFRESH_TOKEN_REC_NAME);
+    private final String SETTINGS_REC_NAME = "itd-settings";
     private RecordStore settingsRec;
 
     //связанное с масштабом
@@ -108,11 +106,6 @@ public class ITD extends MIDlet {
             throw new RuntimeException();
         }
 
-        startPrintln("Открытие хранилища записей...");
-        try {
-            refreshTokenRec = RecordStore.openRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME, true);
-        } catch (Exception e) { throw new RuntimeException(e.toString()); }
-
         startPrintln("Попытка достучаться до прокси...");
         String connCode;
         while (true) {
@@ -134,9 +127,7 @@ public class ITD extends MIDlet {
 
 
     protected void destroyApp(boolean unconditional) {
-        try {
-            refreshTokenRec.closeRecordStore();
-        } catch (Exception ignored) {}
+        refreshToken.close();
     }
 
 
@@ -217,20 +208,7 @@ public class ITD extends MIDlet {
 
                     startPrintln("Сохранение токена...");
 
-                    try {
-                        refreshToken = keyInput.getString();
-                        byte[] refreshTokenBytes = refreshToken.getBytes();
-
-                        startPrintln("Запись токена в RMS...");
-
-                        refreshTokenRec.closeRecordStore();
-                        RecordStore.deleteRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME);
-                        refreshTokenRec = RecordStore.openRecordStore(REFRESH_TOKEN_RECORD_STORE_NAME, true);
-
-                        refreshTokenRec.addRecord(refreshTokenBytes, 0, refreshTokenBytes.length);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e.toString());
-                    }
+                    refreshToken.set(keyInput.getString());
                 }
 
                 initTokenForm();
@@ -310,19 +288,26 @@ public class ITD extends MIDlet {
     }
 
 
-    static String getRequest(String url, String refreshToken, boolean retryOnFail) {
+    static String getRequest(String url, RefreshToken refreshToken, boolean retryOnFail) {
         do {
             log("Поток гет реквеста " + Thread.currentThread().getName());
             try {
                 HttpConnection connection = (HttpConnection) Connector.open(url);
                 connection.setRequestMethod(HttpConnection.GET);
                 if (refreshToken != null) {
-                    connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+                    connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken.get());
                 }
 
                 int code = connection.getResponseCode();
                 log(new Integer(code));
                 if (code == 200) {
+                    if (refreshToken != null) { //если честно я хз зачем это тут вообще
+                        //а бля допёрло
+                        String newRefreshToken = connection.getHeaderField("New-Refresh-Token");
+                        log("New-Refresh-Token " + newRefreshToken);
+                        refreshToken.set(newRefreshToken);
+                    }
+
                     InputStream inputStream = connection.openInputStream();
                     InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
                     StringBuffer buffer = new StringBuffer();
@@ -339,13 +324,14 @@ public class ITD extends MIDlet {
             }
             catch (Exception e) {
                 log("Ошибка getRequest " + e);
+//                throw new RuntimeException(e.toString());
             }
         } while (retryOnFail);
         return null;
     }
 
 
-    static String getRequest(String url, String refreshToken) {
+    static String getRequest(String url, RefreshToken refreshToken) {
         return getRequest(url, refreshToken, false);
     }
 
@@ -362,6 +348,8 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code == 200) {
+                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
+
                 InputStream inputStream = connection.openInputStream();
                 return inputStream;
             }
@@ -373,12 +361,12 @@ public class ITD extends MIDlet {
     }
 
 
-    static String postRequest(String url, byte[] data, String refreshToken) {
+    static String postRequest(String url, byte[] data, RefreshToken refreshToken) {
         String response = "";
         try {
             HttpConnection connection = (HttpConnection) Connector.open(url);
             connection.setRequestMethod(HttpConnection.POST);
-            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken.get());
 
             OutputStream outputStream = connection.openOutputStream();
 
@@ -387,6 +375,8 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code / 100 == 2) {
+                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
+
                 response = connection.getResponseMessage();
                 System.out.println(response);
             }
@@ -399,12 +389,12 @@ public class ITD extends MIDlet {
     }
 
 
-    static String deleteRequest(String url, byte[] data, String refreshToken) {
+    static String deleteRequest(String url, byte[] data, RefreshToken refreshToken) {
         String response = "";
         try {
             HttpConnection connection = (HttpConnection) Connector.open(url);
             connection.setRequestMethod(HttpConnection.DELETE);
-            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken);
+            connection.setRequestProperty("Cookie", "refresh_token=" + refreshToken.get());
 
             OutputStream outputStream = connection.openOutputStream();
 
@@ -413,6 +403,8 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code / 100 == 2) {
+                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
+
                 response = connection.getResponseMessage();
                 System.out.println(response);
             }
@@ -442,12 +434,6 @@ public class ITD extends MIDlet {
 
     private void initTokenForm() {
         this.tokenForm = new Form("Вход");
-
-        try {
-            if (refreshTokenRec.getNumRecords() == 1) {
-                refreshToken = new String(refreshTokenRec.getRecord(1), "UTF-8");
-            }
-        } catch (Exception e) { throw new RuntimeException(e.toString()); }
 
         if (refreshToken != null) {
             if (testRefreshToken(refreshToken)) {
@@ -576,7 +562,7 @@ public class ITD extends MIDlet {
     }
 
 
-    public String getRefreshToken() {
+    public RefreshToken getRefreshToken() {
         return this.refreshToken;
     }
 
@@ -643,11 +629,12 @@ public class ITD extends MIDlet {
 
 
     void startPrintln(String text) {
+        log(text);
         if (startForm.isShown()) startForm.append(text + "\n");
     }
 
 
-    boolean testRefreshToken(String refreshToken) {
+    boolean testRefreshToken(RefreshToken refreshToken) {
         for (int attempt = 0; attempt < 3; attempt++) {
             startPrintln("Проверка токена...");
 

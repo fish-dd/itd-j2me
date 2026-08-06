@@ -1,0 +1,2 @@
+VERSION=$(grep "MIDlet-Version" META-INF/MANIFEST.MF | cut -d ':' -f 2 | tr -d ' \r' | tr '.' '-')
+echo "-outjars '/home/kirill/Документы/IdeaProjects/itd-j2me/deployed/itd-j2me-${VERSION}.jar'" > file_name.cfg
