@@ -11,14 +11,14 @@ import java.io.*;
 import java.util.Vector;
 
 public class ITD extends MIDlet {
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
     private boolean isAlreadyRunning = false;
     private String appVersion;
 
     private Display display;
 
     static String[] URLS = {"http://127.0.0.1:5000", "http://ultimatefish.ddns.net:1740", "http://192.168.31.170", "http://2.26.98.34:1740"};
-    static String URL = URLS[1];
+    static String URL = URLS[0];
     static String API_URL = URL + "/api";
     static String NAME = "итд";
 
@@ -113,7 +113,6 @@ public class ITD extends MIDlet {
 
             if (connCode != null && connCode.equals("pong")) break;
 
-            ITD.log("Ошибка теста подключения, ждём");
             startPrintln("Ошибка теста подключения, ждём...");
             try { Thread.sleep(5000); } catch (Exception ignored1) {}
         }
@@ -179,7 +178,7 @@ public class ITD extends MIDlet {
 //                        initSettingsForm();
 //                    }
                     else {
-                        display.setCurrent(new Alert("Ещё не реализовано", ":(", null, AlertType.WARNING));
+                        display.setCurrent(new Alert(":(", "Ещё не реализовано", null, AlertType.WARNING));
                     }
                 }
             }
@@ -348,8 +347,6 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code == 200) {
-                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
-
                 InputStream inputStream = connection.openInputStream();
                 return inputStream;
             }
@@ -375,7 +372,9 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code / 100 == 2) {
-                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
+                String newRefreshToken = connection.getHeaderField("New-Refresh-Token");
+                log("New-Refresh-Token " + newRefreshToken);
+                refreshToken.set(newRefreshToken);
 
                 response = connection.getResponseMessage();
                 System.out.println(response);
@@ -403,7 +402,9 @@ public class ITD extends MIDlet {
 
             int code = connection.getResponseCode();
             if (code / 100 == 2) {
-                log("New-Refresh-Token " + connection.getHeaderField("New-Refresh-Token"));
+                String newRefreshToken = connection.getHeaderField("New-Refresh-Token");
+                log("New-Refresh-Token " + newRefreshToken);
+                refreshToken.set(newRefreshToken);
 
                 response = connection.getResponseMessage();
                 System.out.println(response);
