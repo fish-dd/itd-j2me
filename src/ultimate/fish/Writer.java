@@ -8,6 +8,8 @@ public class Writer extends TextBox {
     public static final int SELF = 0;
     public static final int REPOST = 1;
     public static final int OTHER = 2;
+    public static final int COMMENT = 3;
+    public static final int REPLY = 4;
 
     static final int limit = 1000;
     static final int settings = TextField.ANY;
@@ -33,6 +35,12 @@ public class Writer extends TextBox {
         }
         else if (type == OTHER) {
             setTitle("Пост для " + name);
+        }
+        else if (type == COMMENT) {
+            setTitle("Комментарий");
+        }
+        else if (type == REPLY) {
+            setTitle("Ответ " + name);
         }
     }
 

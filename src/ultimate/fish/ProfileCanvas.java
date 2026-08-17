@@ -4,7 +4,6 @@ import cc.nnproject.json.JSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
-import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
 import java.util.Hashtable;
@@ -33,6 +32,7 @@ public class ProfileCanvas extends FeedCanvas {
         this.profileUrl = profileUrl;
 
         setFullScreenMode(false);
+        setTitle("Профиль");
         initFonts();
         setScreenSize();
         initIcons();
@@ -144,6 +144,7 @@ public class ProfileCanvas extends FeedCanvas {
         //чтобы почистить очередь областей нажатия
         if (hasPointerEvents()) {
             likesHitboxes = new Hashtable();
+            commentsHitboxes = new Hashtable();
             repostsHitboxes = new Hashtable();
         }
 
@@ -170,7 +171,7 @@ public class ProfileCanvas extends FeedCanvas {
         if (scrollY + screenHeight >= elementsHeight) requestPosts();
         if (arePostsRequested) {
             String notification = "Прогрузка постов...";
-            g.setColor(COLOR_POST_REQUEST_NOTIFY);
+            g.setColor(COLOR_DATA_REQUEST_NOTIFY);
             int notifyWidth = strWidth(notification, fontBold);
             g.setFont(fontBold);
             g.drawString(

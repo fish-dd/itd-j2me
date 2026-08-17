@@ -23,6 +23,7 @@ public class ITD extends MIDlet {
     static String NAME = "итд";
 
     static int POSTS_LIMIT = 5;
+    static int COMMENTS_LIMIT = 15;
     static int J2ME_LOADER_FIX_SLEEP = 100;
 
     private Form startForm;
@@ -57,6 +58,7 @@ public class ITD extends MIDlet {
     public CommandListener feedCmdListener;
     public Command backToMenuCmd;
     public Command likeCmd;
+    public Command commentCmd;
     public Command repostCmd;
 
     public CommandListener writerCmdListener;
@@ -135,7 +137,8 @@ public class ITD extends MIDlet {
         selectCmd = new Command("Открыть", Command.OK, 1);
         aboutCmd = new Command("О программе", Command.HELP, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
-        repostCmd = new Command("Репост", Command.ITEM, 2);
+        commentCmd = new Command("Комментарий", Command.ITEM, 2);
+        repostCmd = new Command("Репост", Command.ITEM, 3);
         keyEnterCommand = new Command("Ввод", Command.OK, 1);
         keyRetryCommand = new Command("Повторить", Command.OK, 2);
         postCmd = new Command("Опубликовать", Command.OK, 1);
@@ -146,16 +149,28 @@ public class ITD extends MIDlet {
                     FeedCanvas feed = ((FeedCanvas) displayable);
                     feed.likePost();
                 }
+                else if (command == commentCmd) {
+                    FeedCanvas feed = ((FeedCanvas) displayable);
+                    feed.commentPost();
+                }
                 else if (command == repostCmd) {
                     FeedCanvas feed = ((FeedCanvas) displayable);
                     feed.repostPost();
                 }
                 else if (command == selectCmd) {
-                    display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
+//                    display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
+                    FeedCanvas feed = ((FeedCanvas) displayable);
+                    feed.openPost();
                 }
                 else if (command == backToMenuCmd) {
                     ((FeedCanvas) displayable).stopFeed();
-                    display.setCurrent(menuList);
+                    if (displayable instanceof PostCanvas) {
+                        PostCanvas pc = (PostCanvas) displayable;
+                        display.setCurrent(pc.targetScreen);
+                    }
+                    else {
+                        display.setCurrent(menuList);
+                    }
                 }
             }
         };
@@ -258,10 +273,11 @@ public class ITD extends MIDlet {
                                     int repostsCount = element.getInt("repostsCount");
                                     element.put("repostsCount",repostsCount + 1);
                                     targetScreenFC.elements.setElementAt(element, elementIndex);
+
+                                    targetScreenFC.repaint();
+                                    break;
                                 }
                             }
-
-                            targetScreenFC.repaint();
                         }
                     }
                     else if (type == Writer.OTHER) {
@@ -271,6 +287,31 @@ public class ITD extends MIDlet {
                         jsonContent.put("content", text);
                         jsonContent.put("wallRecipientId", writer.getRecipientId());
                         content = jsonContent.toString();
+                    }
+                    else if (type == Writer.COMMENT) {
+                        String postId = writer.getPostId();
+
+                        url = ITD.API_URL + "/posts/" + postId + "/comments";
+
+                        JSONObject jsonContent = new JSONObject();
+                        jsonContent.put("content", text);
+                        content = jsonContent.toString();
+
+                        if (targetScreen instanceof FeedCanvas) {
+                            FeedCanvas targetScreenFC = (FeedCanvas) targetScreen;
+
+                            for (int elementIndex = 0; elementIndex < targetScreenFC.elements.size(); elementIndex++) {
+                                JSONObject element = (JSONObject) targetScreenFC.elements.elementAt(elementIndex);
+                                if (element.getString("id").equals(postId)) {
+                                    int commentsCount = element.getInt("commentsCount");
+                                    element.put("commentsCount", commentsCount + 1);
+                                    targetScreenFC.elements.setElementAt(element, elementIndex);
+
+                                    targetScreenFC.repaint();
+                                    break;
+                                }
+                            }
+                        }
                     }
 
                     try {
