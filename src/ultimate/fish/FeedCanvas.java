@@ -13,6 +13,7 @@ import java.util.Vector;
 public class FeedCanvas extends ScrollableCanvas {
     private static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular", "&cursor="};
     private static final boolean TOUCH_DEBUG = false; //показывать хитбоксы сенсорных кнопок
+    private static final String TITLE = "Лента";
 
     ITD midlet;
 
@@ -88,7 +89,7 @@ public class FeedCanvas extends ScrollableCanvas {
         this.midlet = midlet;
 
         setFullScreenMode(false);
-        setTitle("Лента");
+        setTitle(TITLE);
         initFonts();
         setScreenSize();
         initIcons();
@@ -409,12 +410,7 @@ public class FeedCanvas extends ScrollableCanvas {
         g.fillRect(0, 0, screenWidth, screenHeight);
 
         //чтобы почистить очередь областей нажатия
-        if (hasPointerEvents()) {
-            likesHitboxes = new Hashtable();
-            commentsHitboxes = new Hashtable();
-            repostsHitboxes = new Hashtable();
-            postsHitboxes = new Hashtable();
-        }
+        reinitHitboxes();
 
         elementsHeightTemp = 0;
 
@@ -813,6 +809,15 @@ public class FeedCanvas extends ScrollableCanvas {
 //        }
 //        return null;
 //    }
+
+    void reinitHitboxes() {
+        if (hasPointerEvents()) {
+            likesHitboxes = new Hashtable();
+            commentsHitboxes = new Hashtable();
+            repostsHitboxes = new Hashtable();
+            postsHitboxes = new Hashtable();
+        }
+    }
 
 
     protected void hitBoxesCheck(int x, int y) {

@@ -10,10 +10,11 @@ import java.util.Hashtable;
 import java.util.Vector;
 
 public class ProfileCanvas extends FeedCanvas {
+    static final String[] URL_PARTS = {ITD.API_URL + "/posts/user/", "?limit=", "&sort=new", "&cursor="};
+    private static final String TITLE = "Профиль";
+
     private String profileUrl;
     private JSONObject profile;
-
-    static final String[] URL_PARTS = {ITD.API_URL + "/posts/user/", "?limit=", "&sort=new", "&cursor="};
 
     String cursor = null;
     boolean isNoMorePosts = false;
@@ -32,7 +33,7 @@ public class ProfileCanvas extends FeedCanvas {
         this.profileUrl = profileUrl;
 
         setFullScreenMode(false);
-        setTitle("Профиль");
+        setTitle(TITLE);
         initFonts();
         setScreenSize();
         initIcons();
@@ -142,11 +143,7 @@ public class ProfileCanvas extends FeedCanvas {
         g.fillRect(0, 0, screenWidth, screenHeight);
 
         //чтобы почистить очередь областей нажатия
-        if (hasPointerEvents()) {
-            likesHitboxes = new Hashtable();
-            commentsHitboxes = new Hashtable();
-            repostsHitboxes = new Hashtable();
-        }
+        reinitHitboxes();
 
         elementsHeightTemp = 0;
 
