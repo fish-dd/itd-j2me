@@ -594,7 +594,7 @@ public class FeedCanvas extends ScrollableCanvas {
         g.setFont(fontBold);
         g.setColor(COLOR_TEXT);
         g.drawString(
-                age + " секунд назад",
+                readableAge(age),
                 PADDING * 2 + avatarSize + offset,
                 userDataY + avatarSize - lineHeight,
                 Graphics.TOP | Graphics.LEFT
@@ -797,6 +797,56 @@ public class FeedCanvas extends ScrollableCanvas {
         );
     }
 
+
+    String ageCase(int rangeAge, int timeRange, String[] cases) {
+        int last = rangeAge % 10;
+
+        if (last == 1) {
+            return cases[0];
+        }
+        else if (rangeAge / 10 % 10 == 1) {
+            return cases[2];
+        }
+        else if (2 <= last && last <= 4) {
+            return cases[1];
+        }
+        else {
+            return cases[2];
+        }
+    }
+
+
+    String readableAge(int age) {
+        int[] timeRanges = {1, 60, 60*60, 60*60*24, 60*60*24*30, 60*60*24*365};
+        String[][] rangeNames = {
+                {"секунду", "секунды", "секунд"},
+                {"минуту", "минуты", "минут"},
+                {"час", "часа", "часов"},
+                {"день", "дня", "дней"},
+                {"месяц", "месяца", "месяцев"},
+                {"год", "года", "лет"}
+        };
+
+        if (age < 30) {
+            return "Только что";
+        }
+        else if (age < timeRanges[timeRanges.length - 1]) {
+            for (int rangeIndex = 0; rangeIndex < timeRanges.length - 1; rangeIndex++) {
+                if (age < timeRanges[rangeIndex + 1]) {
+                    int rangeAge = age / timeRanges[rangeIndex];
+                    String ageName = ageCase(rangeAge, timeRanges[rangeIndex], rangeNames[rangeIndex]);
+                    return rangeAge + " " + ageName + " назад";
+                }
+            }
+        }
+//        else {
+        int rangeAge = age / timeRanges[timeRanges.length - 1];
+        String ageName = ageCase(rangeAge, timeRanges[timeRanges.length - 1], rangeNames[rangeNames.length - 1]);
+        return rangeAge + " " + ageName + " назад";
+//        }
+    }
+
+
     //блулщит не состоялся
 //     JSONObject touchCheck(Hashtable hitboxes, int x, int y) {
 //        Enumeration HbEnumKeys = hitboxes.keys();
@@ -809,6 +859,7 @@ public class FeedCanvas extends ScrollableCanvas {
 //        }
 //        return null;
 //    }
+
 
     void reinitHitboxes() {
         if (hasPointerEvents()) {

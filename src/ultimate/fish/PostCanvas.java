@@ -18,7 +18,6 @@ public class PostCanvas extends FeedCanvas {
     JSONObject post;
 
     Hashtable elementsHeights = postsHeights;
-//    Hashtable postsHeights = elementsHeights;
     Hashtable commentsStrings = new Hashtable();
 
     private static final int REPLY_PADDING = 24;
@@ -217,8 +216,26 @@ public class PostCanvas extends FeedCanvas {
             content = (String[]) commentsStrings.get(id);
         }
         else {
+            String contentStr = comment.getString("content");
+            JSONArray medias = comment.getArray("attachments");
+            for (int mediaIndex = 0; mediaIndex < medias.size(); mediaIndex++) {
+                String type = ((JSONObject) medias.get(mediaIndex)).getString("type");
+                if (type.equals("image")) {
+                    contentStr = "[Фото] " + contentStr;
+                }
+                else if (type.equals("audio")) {
+                    contentStr = "[Аудио] " + contentStr;
+                }
+                else if (type.equals("video")) { //хз можно ли их в комменты отправлять, но пусть будет
+                    contentStr = "[Видео] " + contentStr;
+                }
+            }
+            if (isReply) {
+                String recipientName = comment.getObject("replyTo").getString("displayName");
+                contentStr = "@" + recipientName + ", " + contentStr;
+            }
             content = split(
-                    comment.getString("content"),
+                    contentStr,
                     fontPlain,
                     commentWidth - PADDING - avatarSize,
                     commentWidth
@@ -272,7 +289,8 @@ public class PostCanvas extends FeedCanvas {
             g.setColor(COLOR_TEXT);
             g.setFont(fontBold);
             String displayName = comment.getObject("author").getString("displayName");
-            g.drawString(displayName, padding + avatarSize + PADDING, currentY + PADDING, 0);
+            int metadataY = currentY + PADDING + 2;
+            g.drawString(displayName, padding + avatarSize + PADDING, metadataY, 0);
 
             //лайки
             g.setColor(COLOR_TEXT);
@@ -285,13 +303,13 @@ public class PostCanvas extends FeedCanvas {
             g.drawImage(
                     isLiked ? likeFillIcon : likeIcon,
                     screenWidth - PADDING - likesWidth,
-                    currentY + PADDING,
+                    metadataY,
                     0
             );
             g.drawString(
                     likesCountStr,
                     screenWidth - PADDING - likesCountWidth,
-                    currentY + PADDING,
+                    metadataY,
                     0
             );
 
@@ -299,6 +317,7 @@ public class PostCanvas extends FeedCanvas {
             g.setColor(COLOR_TEXT);
             g.setFont(fontPlain);
             int contentY = currentY + PADDING*2 + avatarSize - lineHeight;
+            if (content.length == 1) contentY -= 2; //чтобы если одна строка текст повыше рисовался
             for (int lineIndex = 0; lineIndex < content.length; lineIndex++) {
                 g.drawString(
                         content[lineIndex],
