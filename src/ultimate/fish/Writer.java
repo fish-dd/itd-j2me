@@ -16,16 +16,20 @@ public class Writer extends TextBox {
 
     private final int type;
     private final String recipientId;
-    private final String postId;
+    private final String elementId;
+    private final String name;
     private final Displayable targetScreen;
+    private final int replyIndex;
 
-    public Writer(int type, String recipientId, String postId, String name, Displayable targetScreen) {
+    public Writer(int type, String recipientId, String elementId, String name, Displayable targetScreen, int replyIndex) {
         super(null, null, limit, settings);
 
         this.type = type;
         this.recipientId = recipientId;
-        this.postId = postId;
+        this.elementId = elementId;
+        this.name = name;
         this.targetScreen = targetScreen;
+        this.replyIndex = replyIndex;
 
         if (type == SELF) {
             setTitle("Написать пост");
@@ -40,7 +44,7 @@ public class Writer extends TextBox {
             setTitle("Комментарий");
         }
         else if (type == REPLY) {
-            setTitle("Ответ " + name);
+            setTitle("Ответ юзеру " + name);
         }
     }
 
@@ -52,11 +56,19 @@ public class Writer extends TextBox {
         return recipientId;
     }
 
-    public String getPostId() {
-        return postId;
+    public String getElementId() {
+        return elementId;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public Displayable getTargetScreen() {
         return targetScreen;
+    }
+
+    public int getReplyIndex() {
+        return replyIndex;
     }
 }

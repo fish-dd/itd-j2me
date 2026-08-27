@@ -12,7 +12,7 @@ import java.util.Vector;
 
 public class FeedCanvas extends ScrollableCanvas {
     private static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular", "&cursor="};
-    private static final boolean TOUCH_DEBUG = false; //показывать хитбоксы сенсорных кнопок
+    protected static final boolean TOUCH_DEBUG = false; //показывать хитбоксы сенсорных кнопок
     private static final String TITLE = "Лента";
 
     ITD midlet;
@@ -460,19 +460,6 @@ public class FeedCanvas extends ScrollableCanvas {
         int postHeight = getElementHeight(post);
         elementsHeightTemp += postHeight;
 
-        int[] h = new int[] {
-            0,
-            currentY,
-            screenWidth,
-            currentY + postHeight
-        };
-        if (!(this instanceof PostCanvas)) postsHitboxes.put(h, post);
-        if (TOUCH_DEBUG) {
-            g.setColor(0xFF0000);
-            g.drawRect(h[0], h[1], h[2]-h[0], h[3]-h[1]);
-            g.setColor(COLOR_TEXT);
-        }
-
         // Оптимизация: Рисуем, только если пост попадает в экран
         if (currentY + postHeight > 0 && currentY < screenHeight) {
             // Рисуем фон выделения, если пост выбран курсором
@@ -499,6 +486,21 @@ public class FeedCanvas extends ScrollableCanvas {
             //чтобы после перехода с сенсора на кнопки выделение было на посте посреди экрана:
             else if (!showSelection && -currentY + screenHeight/2 <= postHeight && currentY <= screenHeight/2){
                 selectedIndex = elements.indexOf(post);
+            }
+
+            if (hasPointerEvents()) {
+                int[] h = new int[]{
+                    0,
+                    currentY,
+                    screenWidth,
+                    currentY + postHeight
+                };
+                if (!(this instanceof PostCanvas)) postsHitboxes.put(h, post); //TODO безобразие с instanceof надо будет исправить
+                if (TOUCH_DEBUG) {
+                    g.setColor(0xFF0000);
+                    g.drawRect(h[0], h[1], h[2] - h[0], h[3] - h[1]);
+                    g.setColor(COLOR_TEXT);
+                }
             }
 
             //содержимое поста
@@ -801,16 +803,16 @@ public class FeedCanvas extends ScrollableCanvas {
     String ageCase(int rangeAge, int timeRange, String[] cases) {
         int last = rangeAge % 10;
 
-        if (last == 1) {
-            return cases[0];
-        }
-        else if (rangeAge / 10 % 10 == 1) {
+        if (rangeAge / 10 % 10 == 1) { //кончается на 10-19
             return cases[2];
         }
-        else if (2 <= last && last <= 4) {
+        else if (last == 1) { //кончается на 1
+            return cases[0];
+        }
+        else if (2 <= last && last <= 4) { //кончается на 2-4
             return cases[1];
         }
-        else {
+        else { //кончается
             return cases[2];
         }
     }
@@ -871,48 +873,68 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    protected void hitBoxesCheck(int x, int y) {
+    boolean likesHbCheck(int x, int y) {
         Enumeration likeHbEnumKeys = likesHitboxes.keys();
         while (likeHbEnumKeys.hasMoreElements()) {
             int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Отправка лайка");
                 likePost((JSONObject) likesHitboxes.get(c));
-                return;
+                return true;
             }
         }
+        return false;
+    }
 
+
+    boolean commentsHbCheck(int x, int y) {
+        Enumeration likeHbEnumKeys = likesHitboxes.keys();
         Enumeration commentsHbEnumKeys = commentsHitboxes.keys();
         while (commentsHbEnumKeys.hasMoreElements()) {
             int[] c /*coords*/ = (int[]) commentsHbEnumKeys.nextElement();
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
-                ITD.log("Отправка тестового коммента");
+                ITD.log("Отправка коммента");
                 commentPost((JSONObject) commentsHitboxes.get(c));
-                return;
+                return true;
             }
         }
+        return false;
+    }
 
+
+    boolean repostsHbCheck(int x, int y) {
         Enumeration repostHbEnumKeys = repostsHitboxes.keys();
         while (repostHbEnumKeys.hasMoreElements()) {
             int[] c /*coords*/ = (int[]) repostHbEnumKeys.nextElement();
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Запуск окна репоста");
                 repostPost((JSONObject) repostsHitboxes.get(c));
-                return;
+                return true;
             }
         }
+        return false;
+    }
 
-        if (!(this instanceof PostCanvas)) {
-            Enumeration postHbEnumKeys = postsHitboxes.keys();
-            while (postHbEnumKeys.hasMoreElements()) {
-                int[] c /*coords*/ = (int[]) postHbEnumKeys.nextElement();
-                if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
-                    ITD.log("Запуск окна репоста");
-                    openPost((JSONObject) postsHitboxes.get(c));
-                    return;
-                }
+
+    boolean postsHbCheck(int x, int y) {
+        Enumeration postHbEnumKeys = postsHitboxes.keys();
+        while (postHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) postHbEnumKeys.nextElement();
+            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                ITD.log("Запуск окна репоста");
+                openPost((JSONObject) postsHitboxes.get(c));
+                return true;
             }
         }
+        return false;
+    }
+
+
+    protected void hitBoxesCheck(int x, int y) {
+        if (likesHbCheck(x, y)) return;
+        if (commentsHbCheck(x, y)) return;
+        if (repostsHbCheck(x, y)) return;
+        if (postsHbCheck(x, y)) return;
     }
 
 
@@ -949,7 +971,7 @@ public class FeedCanvas extends ScrollableCanvas {
 
     void commentPost(JSONObject post) {
         String postId = post.getString("id");
-        midlet.initWriter(Writer.COMMENT, null, postId, null, this);
+        midlet.initWriter(Writer.COMMENT, null, postId, null, this, 0);
     }
 
 
@@ -962,7 +984,7 @@ public class FeedCanvas extends ScrollableCanvas {
     void repostPost(JSONObject post) {
         String postId = post.getString("id");
         String name = post.getObject("author").getString("displayName");
-        midlet.initWriter(Writer.REPOST, null, postId, name, this);
+        midlet.initWriter(Writer.REPOST, null, postId, name, this, 0);
     }
 
 

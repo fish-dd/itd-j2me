@@ -7,6 +7,7 @@ import cc.nnproject.json.JSONObject;
 import javax.microedition.lcdui.Font;
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
+import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
 
@@ -20,13 +21,15 @@ public class PostCanvas extends FeedCanvas {
     Hashtable elementsHeights = postsHeights;
     Hashtable commentsStrings = new Hashtable();
 
-    private static final int REPLY_PADDING = 24;
+    private int replyPadding;
 
     final FeedCanvas targetScreen;
 
     Thread commentLoader;
     final Object commentLoadNotifier = new Object();
     boolean areCommentsRequested = false;
+
+    Hashtable repliesHitboxes;
 
     int totalComments = -1;
     int currentComments = 0;
@@ -53,6 +56,12 @@ public class PostCanvas extends FeedCanvas {
         elements.addElement(post);
 
         ITD.log("пост стартовал");
+    }
+
+
+    void setScreenSize() {
+        super.setScreenSize();
+        replyPadding = Math.max(screenWidth / 10, 20);
     }
 
 
@@ -87,7 +96,9 @@ public class PostCanvas extends FeedCanvas {
             JSONArray replies = comment.getArray("replies");
             if (replies.isEmpty()) continue;
             for (int replyIndex = 0; replyIndex < replies.size(); replyIndex++) {
-                elements.addElement(replies.getObject(replyIndex));
+                JSONObject reply = replies.getObject(replyIndex);
+                reply.put("parentComment", comment.getString("id"));
+                elements.addElement(reply);
             }
         }
     }
@@ -136,6 +147,7 @@ public class PostCanvas extends FeedCanvas {
             likesHitboxes = new Hashtable();
             commentsHitboxes = new Hashtable();
             repostsHitboxes = new Hashtable();
+            repliesHitboxes = new Hashtable();
         }
 
         elementsHeightTemp = 0;
@@ -209,7 +221,7 @@ public class PostCanvas extends FeedCanvas {
 
         boolean isReply = comment.has("replyTo");
         int commentWidth = screenWidth - PADDING*2;
-        if (isReply) commentWidth -= REPLY_PADDING;
+        if (isReply) commentWidth -= replyPadding;
 
         String[] content;
         if (commentsStrings.contains(id)) {
@@ -252,7 +264,7 @@ public class PostCanvas extends FeedCanvas {
             if (isSelected && showSelection) {
                 g.setColor(COLOR_SEL);
                 if (isReply) {
-                    g.fillRect(REPLY_PADDING, currentY, screenWidth - REPLY_PADDING, commentHeight);
+                    g.fillRect(replyPadding, currentY, screenWidth - replyPadding, commentHeight);
                 }
                 else {
                     g.fillRect(0, currentY, screenWidth, commentHeight);
@@ -263,14 +275,27 @@ public class PostCanvas extends FeedCanvas {
                 selectedIndex = elements.indexOf(comment);
             }
 
+            if (hasPointerEvents()) {
+                int[] h = new int[]{
+                    0,
+                    currentY,
+                    screenWidth,
+                    currentY + commentHeight
+                };
+                repliesHitboxes.put(h, comment);
+                if (TOUCH_DEBUG) {
+                    g.setColor(0xFF0000);
+                    g.drawRect(h[0], h[1], h[2] - h[0], h[3] - h[1]);
+                }
+            }
+
             //содержимое коммента
             int padding = PADDING;
-            if (comment.has("replyTo")) padding += REPLY_PADDING;
+            if (comment.has("replyTo")) padding += replyPadding;
 
             //аватарка
             String emoji = comment.getObject("author").getString("avatar");
             String emojiId = getEmojiId(emoji);
-
             if (avatars.containsKey(emojiId)) {
                 if (avatars.get(emojiId) != requestMarker) {
                     Image avatar = (Image) avatars.get(emojiId);
@@ -312,6 +337,19 @@ public class PostCanvas extends FeedCanvas {
                     metadataY,
                     0
             );
+            if (hasPointerEvents()) {
+                int[] h = new int[] {
+                    screenWidth - PADDING - likesWidth,
+                    metadataY,
+                    screenWidth - PADDING,
+                    metadataY + iconSize
+                };
+                likesHitboxes.put(h, comment);
+                if (TOUCH_DEBUG) {
+                    g.setColor(0xFF0000);
+                    g.drawRect(h[0], h[1], h[2]-h[0], h[3]-h[1]);
+                }
+            }
 
             //текст
             g.setColor(COLOR_TEXT);
@@ -393,7 +431,7 @@ public class PostCanvas extends FeedCanvas {
 
         // 3. Добавляем "хвост" (все что осталось после последнего переноса)
         if (start < len) {
-            lineIndex++;
+            lineIndex++; //бесполезно, но пусть будет, я перфекционист (наверное по качеству кода и не скажешь)
             lines.addElement(text.substring(start));
         }
 
@@ -404,8 +442,46 @@ public class PostCanvas extends FeedCanvas {
     }
 
 
-    void likePost() {
-        likePost(post);
+    void likePost() { like(); } //alias по сути
+
+
+    void like() {
+        like((JSONObject) elements.elementAt(selectedIndex));
+    }
+
+
+    void like(final JSONObject element) {
+        if (element.has("replies")) {
+            likeComment(element);
+        }
+        else {
+            likePost(element);
+        }
+    }
+
+
+    void likeComment(final JSONObject comment) {
+        boolean isLiked = comment.getBoolean("isLiked");
+        isLiked = !isLiked;
+        comment.put("isLiked", isLiked);
+
+        int likesCount = comment.getInt("likesCount");
+        comment.put("likesCount", isLiked ? likesCount + 1 : likesCount - 1);
+
+        repaint();
+
+        final boolean fIsLiked = isLiked;
+        final String url = ITD.API_URL + "/comments/" + comment.getString("id") + "/like";
+        new Thread(new Runnable() {
+            public void run() {
+                if (fIsLiked) {
+                    ITD.postRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+                else {
+                    ITD.deleteRequest(url, new byte[]{}, midlet.getRefreshToken());
+                }
+            }
+        }, "likeComment").start();
     }
 
 
@@ -416,6 +492,99 @@ public class PostCanvas extends FeedCanvas {
 
     void repostPost() {
         repostPost(post);
+    }
+
+
+    void reply(JSONObject comment, int index) {
+        String commentId;
+        if (comment.has("parentComment")) {
+            commentId = comment.getString("parentComment");
+        }
+        else {
+            commentId = comment.getString("id");
+        }
+        String recipientId = comment.getObject("author").getString("id");
+        String name = comment.getObject("author").getString("displayName");
+        midlet.initWriter(Writer.REPLY, recipientId, commentId, name, this, index);
+    }
+
+
+    void reply() {
+        reply((JSONObject) elements.elementAt(selectedIndex), selectedIndex);
+    }
+
+
+    void insertComment(JSONObject comment) {
+        elements.insertElementAt(comment, 1);
+    }
+
+
+    void insertReply(JSONObject reply, int index) {
+        elements.insertElementAt(reply, index);
+    }
+
+
+    boolean likesHbCheck(int x, int y) {
+        Enumeration likeHbEnumKeys = likesHitboxes.keys();
+        while (likeHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) likeHbEnumKeys.nextElement();
+            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                ITD.log("Отправка лайка");
+                like((JSONObject) likesHitboxes.get(c));
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    boolean repliesHbCheck(int x, int y) {
+        Enumeration replyHbEnumKeys = repliesHitboxes.keys();
+        while (replyHbEnumKeys.hasMoreElements()) {
+            int[] c /*coords*/ = (int[]) replyHbEnumKeys.nextElement();
+            if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
+                ITD.log("Открытие окна ответа");
+                JSONObject comment = (JSONObject) repliesHitboxes.get(c);
+                int index = elements.lastIndexOf(comment);
+                reply(comment, index);
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    protected void hitBoxesCheck(int x, int y) {
+        if (likesHbCheck(x, y)) return;
+        if (commentsHbCheck(x, y)) return;
+        if (repostsHbCheck(x, y)) return;
+        if (repliesHbCheck(x, y)) return;
+    }
+
+
+    protected void addNontouchCmds() {
+        addCommand(midlet.likeCmd);
+        addCommand(midlet.commentCmd);
+        addCommand(midlet.repostCmd);
+    }
+
+
+    protected void removeNontouchCmds() {
+        removeCommand(midlet.likeCmd);
+        removeCommand(midlet.commentCmd);
+        removeCommand(midlet.repostCmd);
+        removeCommand(midlet.replyCmd);
+    }
+
+
+    protected void keyPressed(int keyCode) {
+        super.keyPressed(keyCode);
+        if (selectedIndex > 0) {
+            addCommand(midlet.replyCmd);
+        }
+        else {
+            removeCommand(midlet.replyCmd);
+        }
     }
 
 

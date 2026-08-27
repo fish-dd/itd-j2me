@@ -1,5 +1,6 @@
 package ultimate.fish;
 
+import cc.nnproject.json.JSON;
 import cc.nnproject.json.JSONObject;
 
 import javax.microedition.io.Connector;
@@ -58,6 +59,7 @@ public class ITD extends MIDlet {
     public CommandListener feedCmdListener;
     public Command backToMenuCmd;
     public Command likeCmd;
+    public Command replyCmd;
     public Command commentCmd;
     public Command repostCmd;
 
@@ -137,8 +139,9 @@ public class ITD extends MIDlet {
         selectCmd = new Command("Открыть", Command.OK, 1);
         aboutCmd = new Command("О программе", Command.HELP, 2);
         likeCmd = new Command("Лайк", Command.ITEM, 1);
-        commentCmd = new Command("Комментарий", Command.ITEM, 2);
-        repostCmd = new Command("Репост", Command.ITEM, 3);
+        replyCmd = new Command("Ответ", Command.ITEM, 2);
+        commentCmd = new Command("Комментарий", Command.ITEM, 3);
+        repostCmd = new Command("Репост", Command.ITEM, 4);
         keyEnterCommand = new Command("Ввод", Command.OK, 1);
         keyRetryCommand = new Command("Повторить", Command.OK, 2);
         postCmd = new Command("Опубликовать", Command.OK, 1);
@@ -148,6 +151,10 @@ public class ITD extends MIDlet {
                 if (command == likeCmd) {
                     FeedCanvas feed = ((FeedCanvas) displayable);
                     feed.likePost();
+                }
+                else if (command == replyCmd) {
+                    PostCanvas postCanvas = ((PostCanvas) displayable);
+                    postCanvas.reply();
                 }
                 else if (command == commentCmd) {
                     FeedCanvas feed = ((FeedCanvas) displayable);
@@ -238,7 +245,8 @@ public class ITD extends MIDlet {
                     String text = writer.getString();
 
                     if (text.length() == 0) {
-                        display.setCurrent(new Alert("Пустой пост", null, null, AlertType.ERROR));
+                        display.setCurrent(new Alert("Нет текста", null, null, AlertType.ERROR));
+                        return;
                     }
 
                     Alert sendingSplash = new Alert("Публикация...", null, null, AlertType.INFO);
@@ -256,7 +264,7 @@ public class ITD extends MIDlet {
                         content = jsonContent.toString();
                     }
                     else if (type == Writer.REPOST) {
-                        String postId = writer.getPostId();
+                        String postId = writer.getElementId();
 
                         url = API_URL + "/posts/" + postId + "/repost";
 
@@ -289,7 +297,7 @@ public class ITD extends MIDlet {
                         content = jsonContent.toString();
                     }
                     else if (type == Writer.COMMENT) {
-                        String postId = writer.getPostId();
+                        String postId = writer.getElementId();
 
                         url = ITD.API_URL + "/posts/" + postId + "/comments";
 
@@ -300,25 +308,82 @@ public class ITD extends MIDlet {
                         if (targetScreen instanceof FeedCanvas) {
                             FeedCanvas targetScreenFC = (FeedCanvas) targetScreen;
 
-                            for (int elementIndex = 0; elementIndex < targetScreenFC.elements.size(); elementIndex++) {
-                                JSONObject element = (JSONObject) targetScreenFC.elements.elementAt(elementIndex);
-                                if (element.getString("id").equals(postId)) {
-                                    int commentsCount = element.getInt("commentsCount");
-                                    element.put("commentsCount", commentsCount + 1);
-                                    targetScreenFC.elements.setElementAt(element, elementIndex);
-
-                                    targetScreenFC.repaint();
-                                    break;
-                                }
+                            JSONObject post;
+                            if (targetScreen instanceof PostCanvas) {
+                                post = (JSONObject) targetScreenFC.elements.elementAt(0);
                             }
+                            else {
+                                post = getObjectById(targetScreenFC.elements, postId);
+                            }
+
+                            post.put("commentsCount", post.getInt("commentsCount") + 1);
+
+                            targetScreenFC.repaint();
                         }
+
+                        if (targetScreen instanceof PostCanvas) {
+                            PostCanvas targetScreenPC = (PostCanvas) targetScreen;
+                            try {
+                                String response = postRequest(url, content.getBytes("UTF-8"), refreshToken);
+                                JSONObject json = JSON.getObject(response);
+                                targetScreenPC.insertComment(json);
+                                targetScreenPC.totalComments++;
+                                targetScreenPC.currentComments++;
+
+                                display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
+                            }
+                            catch (UnsupportedEncodingException ignored) {
+                                display.setCurrent(new Alert("Ошибка публикации", null, null, AlertType.ERROR));
+                            }
+                            return;
+                        }
+                    }
+                    else if (type == Writer.REPLY) {
+                        PostCanvas targetScreenPC = (PostCanvas) targetScreen;
+                        JSONObject post = (JSONObject) targetScreenPC.elements.elementAt(0);
+                        String commentId = writer.getElementId();
+                        String recipientId = writer.getRecipientId();
+                        String name = writer.getName();
+                        int replyIndex = writer.getReplyIndex();
+
+                        url = ITD.API_URL + "/comments/" + commentId + "/replies";
+
+                        JSONObject jsonContent = new JSONObject();
+                        jsonContent.put("content", text);
+                        jsonContent.put("replyToUserId", recipientId);
+                        content = jsonContent.toString();
+
+                        try {
+                            String response = postRequest(url, content.getBytes("UTF-8"), refreshToken);
+                            JSONObject json = JSON.getObject(response);
+
+                            JSONObject replyTo = new JSONObject();
+                            replyTo.put("displayName", name);
+                            replyTo.put("id", recipientId);
+                            json.put("replyTo", replyTo);
+
+                            targetScreenPC.insertReply(json, replyIndex + 1);
+                            targetScreenPC.totalComments++;
+                            targetScreenPC.currentComments++;
+
+                            post.put("commentsCount", post.getInt("commentsCount") + 1);
+
+                            display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
+                        }
+                        catch (UnsupportedEncodingException ignored) {
+                            display.setCurrent(new Alert("Ошибка публикации", null, null, AlertType.ERROR));
+                        }
+                        return;
                     }
 
                     try {
                         postRequest(url, content.getBytes("UTF-8"), refreshToken);
-                    } catch (UnsupportedEncodingException ignored) {}
 
-                    display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
+                        display.setCurrent(new Alert("Опубликовано", null, null, AlertType.CONFIRMATION), targetScreen);
+                    }
+                    catch (UnsupportedEncodingException ignored) {
+                        display.setCurrent(new Alert("Ошибка публикации", null, null, AlertType.ERROR));
+                    }
                 }
                 else if (command == backToMenuCmd) {
                     display.setCurrent(targetScreen);
@@ -412,13 +477,23 @@ public class ITD extends MIDlet {
             outputStream.flush();
 
             int code = connection.getResponseCode();
+            log(code);
             if (code / 100 == 2) {
                 String newRefreshToken = connection.getHeaderField("New-Refresh-Token");
                 log("New-Refresh-Token " + newRefreshToken);
                 refreshToken.set(newRefreshToken);
 
-                response = connection.getResponseMessage();
-                System.out.println(response);
+                InputStream inputStream = connection.openInputStream();
+                InputStreamReader inputReader = new InputStreamReader(inputStream, "UTF-8");
+                StringBuffer buffer = new StringBuffer();
+
+                int answerChar;
+                while ((answerChar = inputReader.read()) != -1) {
+                    buffer.append((char) answerChar);
+                }
+
+                response = buffer.toString();
+                log(response);
             }
         }
         catch (Exception e) {
@@ -568,7 +643,7 @@ public class ITD extends MIDlet {
         aboutForm.append(logo);
 
         StringItem description = new StringItem(null,
-                "Клиент молодёжной соц. сети для несвежих телефонов. Скорее всего ваш 2G тапок дороже 600 рублей его запустит (уже запустил).\n" +
+                "Клиент молодёжной соц. сети для несвежих телефонов. Скорее всего, ваш 2G-тапок дороже 600 рублей его запустит (уже запустил).\n" +
                 "\n" +
                 "Использованные компоненты:\n" +
                 " • NNJSON — github.com/shinovon/nnjson — лицензия MIT\n" +
@@ -577,7 +652,7 @@ public class ITD extends MIDlet {
                 "Отдельное спасибо:\n" +
                 " • shinovon и nnproject за NNJSON, KEmulator nnmod и вдохновение\n" +
                 " • azukicatisreal и vip0ll за то, что запихали в J2ME\n" +
-                " • Бесчисленным добрякам, пилящим гайды\n" +
+                " • Считанным добрякам, пилящим гайды\n" +
                 " • Километрам документаций");
         description.setLayout(Item.LAYOUT_LEFT);
         aboutForm.append(description);
@@ -587,11 +662,11 @@ public class ITD extends MIDlet {
     }
 
 
-    void initWriter(int type, String recipientId, String postId, String name, Displayable targetScreen) {
+    void initWriter(int type, String recipientId, String elementId, String name, Displayable targetScreen, int replyIndex) {
         if (targetScreen == null) {
             targetScreen = menuList;
         }
-        Writer writer = new Writer(type, recipientId, postId, name, targetScreen);
+        Writer writer = new Writer(type, recipientId, elementId, name, targetScreen, replyIndex);
         writer.setCommandListener(writerCmdListener);
         writer.addCommand(backToMenuCmd);
         writer.addCommand(postCmd);
@@ -600,12 +675,23 @@ public class ITD extends MIDlet {
 
 
     void initWriter() {
-        initWriter(Writer.SELF, null, null, null, null);
+        initWriter(Writer.SELF, null, null, null, null, 0);
     }
 
 
     public RefreshToken getRefreshToken() {
         return this.refreshToken;
+    }
+
+
+    JSONObject getObjectById(Vector elements, String id) {
+        for (int elementIndex = 0; elementIndex < elements.size(); elementIndex++) {
+            JSONObject element = (JSONObject) elements.elementAt(elementIndex);
+            if (element.getString("id").equals(id)) {
+                return element;
+            }
+        }
+        return null;
     }
 
 
