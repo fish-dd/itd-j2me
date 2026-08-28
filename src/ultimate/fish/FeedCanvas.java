@@ -6,9 +6,7 @@ import cc.nnproject.json.JSONObject;
 
 import javax.microedition.lcdui.*;
 import java.io.InputStream;
-import java.util.Enumeration;
-import java.util.Hashtable;
-import java.util.Vector;
+import java.util.*;
 
 public class FeedCanvas extends ScrollableCanvas {
     private static final String[] URL_PARTS = {ITD.API_URL + "/posts?limit=", "&tab=popular", "&cursor="};
@@ -98,7 +96,7 @@ public class FeedCanvas extends ScrollableCanvas {
         initMediaLoader();
         initPostLoader();
 
-        loadPosts(ITD.POSTS_LIMIT);
+//        loadPosts(ITD.POSTS_LIMIT);
 
         initCommands();
 
@@ -132,7 +130,7 @@ public class FeedCanvas extends ScrollableCanvas {
 
     void initIcons() {
         try {
-            likeIcon = midlet.getIcon("like");
+            likeIcon = midlet.likeIcon;
             likeFillIcon = midlet.getIcon("like_fill");
             commentIcon = midlet.getIcon("comment");
             viewIcon = midlet.getIcon("view");
@@ -177,8 +175,8 @@ public class FeedCanvas extends ScrollableCanvas {
         int postHeight = Math.max(PADDING*3 + avatarSize + lineHeight*content.length + iconSize, minPostHeight);
         if (content.length != 0) postHeight += PADDING; //отступ после текста
 
-        JSONArray medias = post.getArray("attachments");
-        JSONObject originalPost = post.getObject("originalPost");
+        JSONArray medias = post.getArray("attachments", null);
+        JSONObject originalPost = post.getObject("originalPost", null);
 
         //расчёт высоты контента поста (при наличии)
         //если в посте есть фото/медиа
@@ -363,7 +361,7 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    private boolean loadPosts(int postsLimit) {
+    boolean loadPosts(int postsLimit) {
         try {
             midlet.startPrintln("Получение постов...");
             String url = URL_PARTS[0] + postsLimit + URL_PARTS[1];
@@ -592,7 +590,7 @@ public class FeedCanvas extends ScrollableCanvas {
         }
 
         //время публикации
-        int age = post.getInt("age");
+        long age = isoToAge(post.getString("createdAt"));
         g.setFont(fontBold);
         g.setColor(COLOR_TEXT);
         g.drawString(
@@ -800,10 +798,35 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    String ageCase(int rangeAge, int timeRange, String[] cases) {
-        int last = rangeAge % 10;
+    static long isoToAge(String iso) {
+        String timeZone = "GMT";
+        if (iso.length() > 24) timeZone += "+03:00";
 
-        if (rangeAge / 10 % 10 == 1) { //кончается на 10-19
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone(timeZone));
+        calendar.set(Calendar.YEAR, Integer.parseInt(iso.substring(0, 4)));
+        calendar.set(Calendar.MONTH, Integer.parseInt(iso.substring(5, 7)) - 1); //за каким то хером месяца с 0
+        calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(iso.substring(8, 10)));
+        calendar.set(Calendar.HOUR_OF_DAY, Integer.parseInt(iso.substring(11, 13)));
+        calendar.set(Calendar.MINUTE, Integer.parseInt(iso.substring(14, 16)));
+        calendar.set(Calendar.SECOND, Integer.parseInt(iso.substring(17, 19)));
+        calendar.set(Calendar.MILLISECOND, Integer.parseInt(iso.substring(20, 23)));
+
+//        ITD.log(calendar.getTime());
+//        ITD.log((int) (calendar.getTime().getTime() / 1000));
+//        ITD.log(TimeZone.getAvailableIDs().length);
+//        ITD.log((int) (Calendar.getInstance().getTime().getTime() / 1000) - (int) (calendar.getTime().getTime() / 1000));
+
+        long timeStamp = calendar.getTime().getTime() / 1000L;
+        long now = Calendar.getInstance().getTime().getTime() / 1000L;
+
+        return now - timeStamp;
+    }
+
+
+    String countCase(int num, String[] cases) {
+        int last = num % 10;
+
+        if (num / 10 % 10 == 1) { //кончается на 10-19
             return cases[2];
         }
         else if (last == 1) { //кончается на 1
@@ -818,7 +841,7 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    String readableAge(int age) {
+    String readableAge(long age) {
         int[] timeRanges = {1, 60, 60*60, 60*60*24, 60*60*24*30, 60*60*24*365};
         String[][] rangeNames = {
                 {"секунду", "секунды", "секунд"},
@@ -835,15 +858,15 @@ public class FeedCanvas extends ScrollableCanvas {
         else if (age < timeRanges[timeRanges.length - 1]) {
             for (int rangeIndex = 0; rangeIndex < timeRanges.length - 1; rangeIndex++) {
                 if (age < timeRanges[rangeIndex + 1]) {
-                    int rangeAge = age / timeRanges[rangeIndex];
-                    String ageName = ageCase(rangeAge, timeRanges[rangeIndex], rangeNames[rangeIndex]);
+                    int rangeAge = (int) (age / timeRanges[rangeIndex]);
+                    String ageName = countCase(rangeAge, rangeNames[rangeIndex]);
                     return rangeAge + " " + ageName + " назад";
                 }
             }
         }
 //        else {
-        int rangeAge = age / timeRanges[timeRanges.length - 1];
-        String ageName = ageCase(rangeAge, timeRanges[timeRanges.length - 1], rangeNames[rangeNames.length - 1]);
+        int rangeAge = (int) (age / timeRanges[timeRanges.length - 1]);
+        String ageName = countCase(rangeAge, rangeNames[rangeNames.length - 1]);
         return rangeAge + " " + ageName + " назад";
 //        }
     }

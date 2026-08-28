@@ -6,15 +6,14 @@ import cc.nnproject.json.JSONObject;
 
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
-import java.util.Hashtable;
 import java.util.Vector;
 
 public class ProfileCanvas extends FeedCanvas {
     static final String[] URL_PARTS = {ITD.API_URL + "/posts/user/", "?limit=", "&sort=new", "&cursor="};
     private static final String TITLE = "Профиль";
 
-    private String profileUrl;
-    private JSONObject profile;
+    protected String profileUrl;
+    protected JSONObject profile;
 
     String cursor = null;
     boolean isNoMorePosts = false;
@@ -38,13 +37,15 @@ public class ProfileCanvas extends FeedCanvas {
         setScreenSize();
         initIcons();
 
+        loadProfile(profileUrl);
+
         initAvatarLoader();
         initMediaLoader();
         initPostLoader();
 
         getHeaderSize();
         addHeader();
-        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
+//        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
 
         initCommands();
 
@@ -53,11 +54,20 @@ public class ProfileCanvas extends FeedCanvas {
     }
 
 
+    ProfileCanvas() {}
+
+
     void initIcons() {
         super.initIcons();
         try {
             calendarIcon = midlet.getIcon("calendar");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
+    }
+
+
+    JSONObject loadProfile(String url) {
+        String profileResponse = ITD.getRequest(profileUrl, midlet.getRefreshToken(), true);
+        return profile = JSON.getObject(profileResponse);
     }
 
 
@@ -72,7 +82,7 @@ public class ProfileCanvas extends FeedCanvas {
                         } catch (Exception e) { ITD.log(String.valueOf(e)); }
                     }
 
-                    loadPosts(profileUrl, ITD.POSTS_LIMIT, cursor);
+                    loadPosts(profileUrl, ITD.POSTS_LIMIT);
                     arePostsRequested = false;
                     repaint();
                 } while (!isNoMorePosts);
@@ -98,20 +108,19 @@ public class ProfileCanvas extends FeedCanvas {
     }
 
 
-    private void loadPosts(String profileUrl, final int postsLimit, String cursor) {
-        if (cursor == null) {
-            String profileResponse = ITD.getRequest(profileUrl, midlet.getRefreshToken(), true);
-            profile = JSON.getObject(profileResponse);
-        }
-
+    protected void loadPosts(String profileUrl, final int postsLimit) {
         String username = profile.getString("username");
         String postsUrl = URL_PARTS[0] + username + URL_PARTS[1] + postsLimit + URL_PARTS[2];
         if (cursor != null) {
             postsUrl += URL_PARTS[3] + cursor;
         }
         String postsResponse = ITD.getRequest(postsUrl, midlet.getRefreshToken(), true);
+        JSONObject jsonData = JSON.getObject(postsResponse).getObject("data");
+        if (jsonData.getObject("pagination").getString("nextCursor") != null) {
+            cursor = jsonData.getObject("pagination").getString("nextCursor");
+        }
 
-        JSONArray posts = JSON.getObject(postsResponse).getObject("data").getArray("posts");
+        JSONArray posts = jsonData.getArray("posts");
         for (int postIndex = 0; postIndex < posts.size(); postIndex++) {
             elements.addElement(posts.get(postIndex));
         }
@@ -126,8 +135,6 @@ public class ProfileCanvas extends FeedCanvas {
     void requestPosts() {
         if (!arePostsRequested && !isNoMorePosts) {
             arePostsRequested = true;
-            JSONObject lastPost = (JSONObject) elements.lastElement();
-            cursor = lastPost.getString("createdAt");
             ITD.log("Курсор " + cursor);
 
             synchronized (postLoadNotifier) {
@@ -150,15 +157,17 @@ public class ProfileCanvas extends FeedCanvas {
         // Текущая Y-координата для рисования (с учетом скролла)
         int currentY = -scrollY;
 
-        drawProfileHeader(g, currentY, selectedIndex == 0);
-        currentY += headerHeight;
-
-        for (int postIndex = 1; postIndex < elements.size(); postIndex++) {
+        for (int postIndex = 0; postIndex < elements.size(); postIndex++) {
             JSONObject element = (JSONObject) elements.elementAt(postIndex);
             boolean isSelected = selectedIndex == postIndex;
             if (isSelected) selectedY = currentY;
 
-            drawPost(g, currentY, element, isSelected);
+            if (element.getString("id").equals(HEADER_ID)) {
+                drawProfileHeader(g, currentY, isSelected);
+            }
+            else {
+                drawPost(g, currentY, element, isSelected);
+            }
 
             currentY += ((Integer) postsHeights.get(element.getString("id"))).intValue();
         }
@@ -338,5 +347,16 @@ public class ProfileCanvas extends FeedCanvas {
 
     void likePost() {
         if (selectedIndex != 0) super.likePost();
+    }
+
+
+    protected void keyPressed(int keyCode) {
+        super.keyPressed(keyCode);
+        if (((JSONObject) elements.elementAt(selectedIndex)).getString("id").equals(HEADER_ID)) {
+            removeNontouchCmds();
+        }
+        else {
+            addNontouchCmds();
+        }
     }
 }

@@ -36,19 +36,20 @@ public class ITD extends MIDlet {
     private Form tokenForm;
 
     private List menuList;
-    private String[] menuStrings = {"Для вас", /*"Лента клана", "Подписки",*/ "Поиск", "Новый пост", "Уведомления", "Профиль", "Настройки"};
+    private String[] menuStrings = {"Для вас", /*"Лента клана", "Подписки",*/ "Поиск", "Новый пост", "Уведомления", "Профиль", "Лайки", "Настройки"};
     //иконки
     //google material symbols, Apache License, Version 2.0
     //size 16, weight 400, grade -25, optical size 20, #E4E6E8
     //size 32, weight 400, grade -25, optical size 40, #E4E6E8
-    private Image feedIcon;
-    private Image clanIcon;
-    private Image followsIcon;
-    private Image searchIcon;
-    private Image plusIcon;
-    private Image notificationsIcon;
-    private Image profileIcon;
-    private Image settingsIcon;
+    Image feedIcon;
+    Image clanIcon;
+    Image followsIcon;
+    Image searchIcon;
+    Image plusIcon;
+    Image notificationsIcon;
+    Image profileIcon;
+    Image likeIcon;
+    Image settingsIcon;
     private Image[] menuIcons;
     private CommandListener menuCmdListener;
     public Command selectCmd;
@@ -100,9 +101,10 @@ public class ITD extends MIDlet {
             plusIcon = getIcon("plus");
             notificationsIcon = getIcon("notifications");
             profileIcon = getIcon("account");
+            likeIcon = getIcon("like");
             settingsIcon = getIcon("settings");
         } catch (Exception e) { throw new RuntimeException(e.toString()); }
-        menuIcons = new Image[]{feedIcon, searchIcon, plusIcon, notificationsIcon, profileIcon, settingsIcon};
+        menuIcons = new Image[]{feedIcon, searchIcon, plusIcon, notificationsIcon, profileIcon, likeIcon, settingsIcon};
 
         initMenuList();
 
@@ -196,8 +198,13 @@ public class ITD extends MIDlet {
                     else if (menuList.isSelected(4)) {
                         initProfileCanvas();
                     }
-//                    else if (menuList.isSelected(5)) {
+                    else if (menuList.isSelected(5)) {
+                        initLikedCanvas();
+                    }
+//                    else if (menuList.isSelected(6)) {
 //                        initSettingsForm();
+//                        log((int) FeedCanvas.isoToAge("2026-08-27T16:58:19.261Z"));
+//                        log((int) FeedCanvas.isoToAge("2026-08-16 03:19:01.486891+03"));
 //                    }
                     else {
                         display.setCurrent(new Alert(":(", "Ещё не реализовано", null, AlertType.WARNING));
@@ -544,6 +551,11 @@ public class ITD extends MIDlet {
     }
 
 
+    static void log(long longislandvstakane) {
+        if (ITD.DEBUG) System.out.println(longislandvstakane);
+    }
+
+
     static void log(boolean bool) {
         if (ITD.DEBUG) System.out.println(bool);
     }
@@ -606,6 +618,15 @@ public class ITD extends MIDlet {
 
         loaderSleep();
         display.setCurrent(profileCanvas);
+    }
+
+
+    private void initLikedCanvas() {
+        final String profileUrl = API_URL + "/users/me";
+        LikedCanvas likedCanvas = new LikedCanvas(this, profileUrl);
+
+        loaderSleep();
+        display.setCurrent(likedCanvas);
     }
 
 
