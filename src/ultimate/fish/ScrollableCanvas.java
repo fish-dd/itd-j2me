@@ -51,7 +51,7 @@ public abstract class ScrollableCanvas extends Canvas {
 
         int action = getGameAction(keyCode);
 
-        int selectedElementHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex));
+        int selectedElementHeight = getElementHeight(/*(JSONObject)*/ elements.elementAt(selectedIndex));
         int scrolledHeight = scrollY + selectedY;
 
         if (action == UP) {
@@ -69,7 +69,7 @@ public abstract class ScrollableCanvas extends Canvas {
 
     void onUp(int selectedElementHeight, int scrolledHeight) {
         if (selectedIndex > 0) {
-            int prevPostHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex - 1));
+            int prevPostHeight = getElementHeight(/*(JSONObject)*/ elements.elementAt(selectedIndex - 1));
 
             // Логика "умного" скролла вверх
             if (selectedElementHeight > screenHeight) {
@@ -123,7 +123,7 @@ public abstract class ScrollableCanvas extends Canvas {
 
     void onDown(int selectedElementHeight, int scrolledHeight, int elementsAmount) {
         if (selectedIndex < elementsAmount - 1) { // если не последний пост
-            int nextPostHeight = getElementHeight((JSONObject) elements.elementAt(selectedIndex + 1));
+            int nextPostHeight = getElementHeight(/*(JSONObject)*/ elements.elementAt(selectedIndex + 1));
 
             // Логика "умного" скролла вниз
             if (selectedElementHeight > screenHeight) { // если текущий пост выше чем экран

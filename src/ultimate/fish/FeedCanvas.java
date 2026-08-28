@@ -28,7 +28,7 @@ public class FeedCanvas extends ScrollableCanvas {
     Thread avatarLoader;
 
     Hashtable medias = new Hashtable();
-    final Vector mediasQueue = new Vector();
+    Vector mediasQueue = new Vector();
     Thread mediaLoader;
     final Object requestMarker = new Object();
 
@@ -242,10 +242,10 @@ public class FeedCanvas extends ScrollableCanvas {
                     }
 
                     ITD.log("Запрос на медиа " + mediasQueue);
-                    Vector mediaRequest = (Vector) mediasQueue.elementAt(0);
-                    String fileName = (String) mediaRequest.elementAt(0);
-                    int type = ((Integer) mediaRequest.elementAt(1)).intValue();
-                    String postId = (String) mediaRequest.elementAt(2);
+                    Object[] mediaRequest = (Object[]) mediasQueue.elementAt(0);
+                    String fileName = (String) mediaRequest[0];
+                    int type = ((Integer) mediaRequest[1]).intValue();
+                    String postId = (String) mediaRequest[2];
 
                     if (type == POST || type == REPOST) {
                         int mediaWidth = type == REPOST ? repostMediaWidth : postMediaWidth;
@@ -290,7 +290,10 @@ public class FeedCanvas extends ScrollableCanvas {
                         mediasQueue.removeElementAt(0);
                     }
 
-                    repaint();
+                    Displayable dispNow = Display.getDisplay(midlet).getCurrent();
+                    if (dispNow instanceof FeedCanvas) {
+                        ((FeedCanvas) dispNow).publicRepaint();
+                    }
                 }
             }
         }, "mediaLoader");
@@ -428,18 +431,12 @@ public class FeedCanvas extends ScrollableCanvas {
         elementsHeight = elementsHeightTemp;
 
         if (scrollY + screenHeight >= elementsHeight) requestPosts();
-        if (arePostsRequested) {
-            String notification = "Прогрузка постов...";
-            g.setColor(COLOR_DATA_REQUEST_NOTIFY);
-            int notifyWidth = strWidth(notification, fontBold);
-            g.setFont(fontBold);
-            g.drawString(
-                    notification,
-                    (screenWidth - notifyWidth) / 2,
-                    PADDING*2,
-                    Graphics.TOP | Graphics.LEFT
-            );
-        }
+        if (arePostsRequested) drawLoadNotify(g, "Прогрузка постов...");
+    }
+
+
+    void publicRepaint() { //костыль, но почему бы нет
+        repaint();
     }
 
 
@@ -502,7 +499,7 @@ public class FeedCanvas extends ScrollableCanvas {
             }
 
             //содержимое поста
-            drawPostContent(g, currentY, post, content, postsHeights, false);
+            drawPostContent(g, currentY, post, content, false);
 
             //репост
             JSONObject repost = post.getObject("originalPost");
@@ -529,7 +526,7 @@ public class FeedCanvas extends ScrollableCanvas {
                 );
 
                 //содержимое репоста
-                drawPostContent(g, repostY, repost, repostContent, repostsMediaHeights, true);
+                drawPostContent(g, repostY, repost, repostContent, true);
             }
 
             drawMetadata(g, currentY, postHeight, post);
@@ -541,9 +538,9 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
-    void drawPostContent(Graphics g, int currentY, JSONObject post,
-                         String[] content, Hashtable mediaHeights, boolean isRepost) {
+    void drawPostContent(Graphics g, int currentY, JSONObject post, String[] content, boolean isRepost) {
         int offset = isRepost ? PADDING+1 : 0;
+        Hashtable mediaHeights = isRepost ? repostsMediaHeights : postsHeights;
 
         // Рисуем аватарку
         String emoji = post.getObject("author").getString("avatar");
@@ -658,11 +655,8 @@ public class FeedCanvas extends ScrollableCanvas {
                     if (!medias.containsKey(fileName)) {
                         medias.put(fileName, requestMarker); //маркер реквеста
 
-                        Vector mediaRequest = new Vector(3);
-
-                        mediaRequest.addElement(fileName);
-                        mediaRequest.addElement(new Integer(isRepost ? REPOST : POST));
-                        mediaRequest.addElement(postId);
+                        int type = isRepost ? REPOST : POST;
+                        Object[] mediaRequest = new Object[]{fileName, new Integer(type), postId};
 
                         mediasQueue.addElement(mediaRequest);
 
@@ -1119,6 +1113,18 @@ public class FeedCanvas extends ScrollableCanvas {
     }
 
 
+    void drawLoadNotify(Graphics g, String notification) {
+        g.setColor(COLOR_DATA_REQUEST_NOTIFY);
+        g.setFont(fontBold);
+        g.drawString(
+                notification,
+                screenWidth / 2,
+                PADDING*2,
+                Graphics.TOP | Graphics.HCENTER
+        );
+    }
+
+
     int getMediaHeight(JSONObject attachmentInfo, int mediaWidth) {
         int width = attachmentInfo.getInt("width");
         int height = attachmentInfo.getInt("height");
@@ -1127,6 +1133,16 @@ public class FeedCanvas extends ScrollableCanvas {
         int mediaHeight = (int) Math.ceil(mediaWidth * ratio);
 
         return mediaHeight;
+    }
+
+
+    JSONObject getElement(int index) { //здесь, а не в скроллабл потому что jsonobject
+        return (JSONObject) elements.elementAt(index);
+    }
+
+
+    JSONObject getSel() {
+        return getElement(selectedIndex);
     }
 
 

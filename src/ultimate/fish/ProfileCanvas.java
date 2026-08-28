@@ -41,16 +41,14 @@ public class ProfileCanvas extends FeedCanvas {
 
         initAvatarLoader();
         initMediaLoader();
-        initPostLoader();
 
         getHeaderSize();
         addHeader();
-//        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
+        //        loadPosts(profileUrl, ITD.POSTS_LIMIT, null);
+
+        initPostLoader();
 
         initCommands();
-
-//        ITD.loaderSleep(); //потому что ж2ме лоудер крашится без этого
-//        Display.getDisplay(midlet).setCurrent(this);
     }
 
 
@@ -152,6 +150,15 @@ public class ProfileCanvas extends FeedCanvas {
         //чтобы почистить очередь областей нажатия
         reinitHitboxes();
 
+        if (showSelection) {
+            if (getSel().getString("id").equals(HEADER_ID)) {
+                removeNontouchCmds();
+            }
+            else {
+                addNontouchCmds();
+            }
+        }
+
         elementsHeightTemp = 0;
 
         // Текущая Y-координата для рисования (с учетом скролла)
@@ -175,18 +182,8 @@ public class ProfileCanvas extends FeedCanvas {
         elementsHeight = elementsHeightTemp;
 
         if (scrollY + screenHeight >= elementsHeight) requestPosts();
-        if (arePostsRequested) {
-            String notification = "Прогрузка постов...";
-            g.setColor(COLOR_DATA_REQUEST_NOTIFY);
-            int notifyWidth = strWidth(notification, fontBold);
-            g.setFont(fontBold);
-            g.drawString(
-                    notification,
-                    (screenWidth - notifyWidth) / 2,
-                    PADDING*2,
-                    Graphics.TOP | Graphics.LEFT
-            );
-        }
+
+        if (arePostsRequested) drawLoadNotify(g, "Прогрузка постов...");
     }
 
 
@@ -347,16 +344,5 @@ public class ProfileCanvas extends FeedCanvas {
 
     void likePost() {
         if (selectedIndex != 0) super.likePost();
-    }
-
-
-    protected void keyPressed(int keyCode) {
-        super.keyPressed(keyCode);
-        if (((JSONObject) elements.elementAt(selectedIndex)).getString("id").equals(HEADER_ID)) {
-            removeNontouchCmds();
-        }
-        else {
-            addNontouchCmds();
-        }
     }
 }

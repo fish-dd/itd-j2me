@@ -4,9 +4,8 @@ import cc.nnproject.json.JSON;
 import cc.nnproject.json.JSONArray;
 import cc.nnproject.json.JSONObject;
 
-import javax.microedition.lcdui.Font;
-import javax.microedition.lcdui.Graphics;
-import javax.microedition.lcdui.Image;
+import javax.microedition.lcdui.*;
+import java.io.InputStream;
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
@@ -19,31 +18,37 @@ public class PostCanvas extends FeedCanvas {
     final String postId;
     JSONObject post;
 
+    final Vector commentsMediasQueue = new Vector();
+    Hashtable commentsMedias = new Hashtable();
+    int commentMediaWidth;
+    int replyMediaWidth;
+
     Hashtable elementsHeights = postsHeights;
     Hashtable commentsStrings = new Hashtable();
 
     private int replyPadding;
     private int loadRepliesHeight;
 
-    final FeedCanvas targetScreen;
+    final FeedCanvas parentScreen;
 
     Thread commentLoader;
     final Object commentLoadNotifier = new Object();
     boolean areCommentsRequested = false;
     String cursor = null;
-    Hashtable replyPages = new Hashtable();
+
+    Vector repliesRequests = new Vector();
 
     Hashtable repliesHitboxes;
 
     int totalComments = -1;
     int currentComments = 0;
 
-    PostCanvas(ITD midlet, JSONObject post, FeedCanvas targetScreen) {
+    PostCanvas(ITD midlet, JSONObject post, FeedCanvas parentScreen) {
         super();
         this.midlet = midlet;
         this.post = post;
         this.postId = post.getString("id");
-        this.targetScreen = targetScreen;
+        this.parentScreen = parentScreen;
 
         setFullScreenMode(false);
         setTitle(TITLE);
@@ -51,14 +56,18 @@ public class PostCanvas extends FeedCanvas {
         setScreenSize();
         initIcons();
 
-        avatars = targetScreen.avatars;
+        avatars = parentScreen.avatars;
         initAvatarLoader();
+        medias = parentScreen.medias;
+        mediasQueue = parentScreen.mediasQueue;
         initMediaLoader();
-        initCommentLoader();
-        initCommands();
 
 //        loadPost();
         elements.addElement(post);
+
+        initCommentLoader();
+
+        initCommands();
 
         ITD.log("пост стартовал");
     }
@@ -66,9 +75,13 @@ public class PostCanvas extends FeedCanvas {
 
     void setScreenSize() {
         super.setScreenSize();
+
         replyPadding = Math.max(screenWidth / 10, 20);
         loadRepliesHeight = lineHeight + PADDING*4;
         elementsHeights.put(REPLIES_LOADER_ID, new Integer(loadRepliesHeight));
+
+        commentMediaWidth = screenWidth - PADDING*2;
+        replyMediaWidth = commentMediaWidth - replyPadding;
     }
 
 
@@ -109,25 +122,76 @@ public class PostCanvas extends FeedCanvas {
             JSONArray replies = comment.getArray("replies");
             for (int replyIndex = 0; replyIndex < replies.size(); replyIndex++) {
                 JSONObject reply = replies.getObject(replyIndex);
-                reply.put("parentComment", comment.getString("id"));
+                reply.put("parent", comment.getString("id"));
                 elements.addElement(reply);
             }
 
-            if (comment.getInt("repliesCount") > replies.size()) {
-                int rest = comment.getInt("repliesCount") - replies.size();
+            int loaded = replies.size();
+            if (comment.getInt("repliesCount") > loaded) {
+                int rest = comment.getInt("repliesCount") - loaded;
                 JSONObject repliesLoader = new JSONObject();
                 repliesLoader.put("id", REPLIES_LOADER_ID);
-                repliesLoader.put("parentComment", comment.getString("id"));
-                repliesLoader.put(
-                        "content",
-                        "Ещё " + rest + " " + countCase(
-                                rest,
-                                new String[]{"ответ", "ответа", "ответов"}
-                        )
-                );
+                repliesLoader.put("parent", comment.getString("id"));
+                repliesLoader.put("page", 1);
+                repliesLoader.put("loaded", loaded);
+                repliesLoader.put("rest", rest);
                 elements.addElement(repliesLoader);
             }
         }
+    }
+
+
+    void initMediaLoader() {
+        ITD.log("медиа поток");
+        mediaLoader = new Thread(new Runnable() {
+            public void run() {
+                while (true) {
+                    while (commentsMediasQueue.isEmpty()) {
+                        synchronized (commentsMediasQueue) {
+                            try {
+                                commentsMediasQueue.wait(); //пик шизы
+                            } catch (Exception e) { ITD.log(String.valueOf(e)); } //ожидание реальность
+                        }
+                    }
+
+                    ITD.log("Запрос на медиа " + commentsMediasQueue);
+                    Object[] mediaRequest = (Object[]) commentsMediasQueue.elementAt(0);
+                    String fileName = (String) mediaRequest[0];
+                    boolean isReply = ((Boolean) mediaRequest[1]).booleanValue();
+                    String commentId = (String) mediaRequest[2];
+
+                    int mediaWidth = isReply ? replyMediaWidth : commentMediaWidth;
+
+                    Image media;
+                    try {
+                        String mediaUrl = ITD.URL + "/media/" + fileName + "?width=" + mediaWidth;
+                        InputStream mediaRaw = ITD.rawGetRequest(mediaUrl);
+                        media = Image.createImage(mediaRaw);
+
+                        int mediaHeight = ((Integer) elementsHeights.get(fileName)).intValue();
+                        if (media.getHeight() != mediaHeight) {
+                            ITD.log("НЕСОСТЫКОВКА " + media.getHeight() + " " + mediaHeight);
+                            elementsHeights.put(fileName, new Integer(media.getHeight()));
+
+                            Integer newPostHeight = new Integer(((Integer) elementsHeights.get(commentId)).intValue() + media.getHeight() - mediaHeight);
+                            elementsHeights.put(commentId, newPostHeight);
+                        }
+                    }
+                    catch (Exception e) {
+                        ITD.log("Ошибка создания медиа " + e);
+                        media = Image.createImage(mediaWidth, 100);
+                    }
+
+                    commentsMedias.put(fileName, media);
+                    commentsMediasQueue.removeElementAt(0);
+
+                    repaint();
+                }
+            }
+        }, "mediaLoader");
+
+        ITD.log("медиа поток запуск");
+        mediaLoader.start();
     }
 
 
@@ -177,6 +241,21 @@ public class PostCanvas extends FeedCanvas {
             repliesHitboxes = new Hashtable();
         }
 
+        if (showSelection) {
+            if (selectedIndex == 0) {
+                addNontouchCmds();
+                removeCommand(midlet.replyCmd);
+            }
+            else if (getSel().get("id").equals(REPLIES_LOADER_ID)) {
+                removeNontouchCmds();
+                addCommand(midlet.loadCmd);
+            }
+            else {
+                addNontouchCmds();
+                addCommand(midlet.replyCmd);
+            }
+        }
+
         elementsHeightTemp = 0;
 
         // Текущая Y-координата для рисования (с учетом скролла)
@@ -184,6 +263,9 @@ public class PostCanvas extends FeedCanvas {
 
         for (int elementIndex = 0; elementIndex < elements.size(); elementIndex++) {
             JSONObject element = (JSONObject) elements.elementAt(elementIndex);
+
+            if (element.has("hidden") && element.getBoolean("hidden")) continue;
+
             boolean isSelected = selectedIndex == elementIndex;
             if (isSelected) selectedY = currentY;
 
@@ -215,18 +297,9 @@ public class PostCanvas extends FeedCanvas {
         elementsHeight = elementsHeightTemp;
 
         if ((scrollY + screenHeight >= elementsHeight) && (currentComments != totalComments)) requestComments();
-        if (areCommentsRequested) {
-            String notification = "Прогрузка комментов...";
-            g.setColor(COLOR_DATA_REQUEST_NOTIFY);
-            int notifyWidth = strWidth(notification, fontBold);
-            g.setFont(fontBold);
-            g.drawString(
-                    notification,
-                    (screenWidth - notifyWidth) / 2,
-                    PADDING*2,
-                    Graphics.TOP | Graphics.LEFT
-            );
-        }
+
+        if (arePostsRequested) drawLoadNotify(g, "Прогрузка постов...");
+        else if (!repliesRequests.isEmpty()) drawLoadNotify(g, "Прогрузка ответов...");
     }
 
 
@@ -243,19 +316,39 @@ public class PostCanvas extends FeedCanvas {
     }
 
 
-    int calcCommentHeight(JSONObject comment) {
-        int linesCount = ((String[]) commentsStrings.get(comment.getString("id"))).length;
-        int height = fontPlain.getHeight()*(linesCount - 1) + PADDING*3 + avatarSize;
-        return Math.max(height, avatarSize + PADDING*2);
-    }
-
-    //ща по другому попробую
-//    protected int calcPostHeight(JSONObject post) {
-//        int height = super.calcPostHeight(post);
-//        String id = post.getString("id");
-//        elementsHeights.put()
-//        return height;
+//    int calcCommentHeight(JSONObject comment) {
+//        int linesCount = ((String[]) commentsStrings.get(comment.getString("id"))).length;
+//        int height = fontPlain.getHeight()*(linesCount - 1) + PADDING*3 + avatarSize;
+//        return Math.max(height, avatarSize + PADDING*2);
 //    }
+
+
+    //функция взята из feedcanvas и переделана под комменты
+    protected int calcCommentHeight(JSONObject comment) {
+        String[] content = (String[]) commentsStrings.get(comment.getString("id"));
+        int linesCount = content.length;
+
+        int height = fontPlain.getHeight() * (linesCount - 1) + PADDING*3 + avatarSize;
+        height = Math.max(height, avatarSize + PADDING*2);
+
+        JSONArray medias = comment.getArray("attachments", null);
+
+        if (!medias.isEmpty()) {
+            for (int mediaIndex = 0; mediaIndex < medias.size(); mediaIndex++) {
+                JSONObject mediaInfo = medias.getObject(mediaIndex);
+
+                int mediaHeight = getMediaHeight(mediaInfo, postMediaWidth);
+                height += mediaHeight + PADDING;
+
+                //сохранение высоты медиа в словарь
+                String fileName = ITD.getFileName(mediaInfo.getString("url"));
+                elementsHeights.put(fileName, new Integer(mediaHeight));
+            }
+        }
+
+        ITD.log("Высота коммента: " + height);
+        return height;
+    }
 
 
     void drawComment(Graphics g, int currentY, JSONObject comment, boolean isSelected) {
@@ -274,10 +367,7 @@ public class PostCanvas extends FeedCanvas {
             JSONArray medias = comment.getArray("attachments");
             for (int mediaIndex = 0; mediaIndex < medias.size(); mediaIndex++) {
                 String type = ((JSONObject) medias.get(mediaIndex)).getString("type");
-                if (type.equals("image")) {
-                    contentStr = "[Фото] " + contentStr;
-                }
-                else if (type.equals("audio")) {
+                if (type.equals("audio")) {
                     contentStr = "[Аудио] " + contentStr;
                 }
                 else if (type.equals("video")) { //хз можно ли их в комменты отправлять, но пусть будет
@@ -333,7 +423,7 @@ public class PostCanvas extends FeedCanvas {
 
             //содержимое коммента
             int padding = PADDING;
-            if (comment.has("replyTo")) padding += replyPadding;
+            if (isReply) padding += replyPadding;
 
             //аватарка
             String emoji = comment.getObject("author").getString("avatar");
@@ -407,6 +497,56 @@ public class PostCanvas extends FeedCanvas {
                 );
             }
 
+            //картинки
+            JSONArray attachments = comment.getArray("attachments");
+            if (!attachments.isEmpty()) {
+                String commentId = comment.getString("id");
+                int mediaY = currentY + Math.max(lineHeight * (content.length - 1)
+                        + PADDING*3 + avatarSize, avatarSize + PADDING*2);
+
+                for (int mediaIndex = 0; mediaIndex < attachments.size(); mediaIndex++) {
+                    JSONObject mediaInfo = attachments.getObject(mediaIndex);
+
+                    if (!mediaInfo.getString("type").equals("image")) continue;
+
+                    String url = mediaInfo.getString("url");
+                    String fileName = ITD.getFileName(url);
+
+                    int mediaHeight = ((Integer) elementsHeights.get(fileName)).intValue();
+
+                    if (commentsMedias.containsKey(fileName) && commentsMedias.get(fileName) != requestMarker) {
+                        Image media = (Image) commentsMedias.get(fileName);
+                        g.drawImage(
+                                media,
+                                padding,
+                                mediaY,
+                                0
+                        );
+                    }
+                    else {
+                        g.setColor(COLOR_LOADING);
+                        g.fillRect(
+                                padding,
+                                mediaY,
+                                isReply ? replyMediaWidth : commentMediaWidth,
+                                mediaHeight
+                        );
+
+                        if (!commentsMedias.containsKey(fileName)) {
+                            commentsMedias.put(fileName, requestMarker); //маркер реквеста
+                            Object[] mediaRequest = new Object[]{fileName, ITD.bool(isReply), commentId};
+                            commentsMediasQueue.addElement(mediaRequest);
+
+                            synchronized (commentsMediasQueue) {
+                                commentsMediasQueue.notify();
+                            }
+                        }
+                    }
+
+                    mediaY += mediaHeight + PADDING;
+                }
+            }
+
             //разделительные линии
             g.setColor(COLOR_SEL);
             g.drawLine(isReply ? replyPadding : 0, currentY + commentHeight - 1, screenWidth - 1, currentY + commentHeight - 1);
@@ -428,11 +568,26 @@ public class PostCanvas extends FeedCanvas {
                 selectedIndex = elements.indexOf(element);
             }
 
+            if (hasPointerEvents() && !element.getBoolean("hidden", false)) {
+                int[] h = new int[]{
+                        0,
+                        currentY,
+                        screenWidth,
+                        currentY + loadRepliesHeight
+                };
+                repliesHitboxes.put(h, element);
+                if (TOUCH_DEBUG) {
+                    g.setColor(0xFF0000);
+                    g.drawRect(h[0], h[1], h[2] - h[0], h[3] - h[1]);
+                }
+            }
+
             //надпись
+            int rest = element.getInt("rest");
             g.setColor(COLOR_TEXT);
             g.setFont(fontPlain);
             g.drawString(
-                    element.getString("content"),
+                    "Ещё " + rest + " " + countCase(rest, new String[]{"ответ", "ответа", "ответов"}),
                     replyPadding + PADDING*2,
                     currentY + (loadRepliesHeight - lineHeight) / 2,
                     Graphics.TOP | Graphics.LEFT
@@ -573,10 +728,11 @@ public class PostCanvas extends FeedCanvas {
     }
 
 
-    void reply(JSONObject comment, int index) {
+    void reply(JSONObject comment) {
+        int index = elements.indexOf(comment);
         String commentId;
-        if (comment.has("parentComment")) {
-            commentId = comment.getString("parentComment");
+        if (comment.has("parent")) {
+            commentId = comment.getString("parent");
         }
         else {
             commentId = comment.getString("id");
@@ -588,7 +744,71 @@ public class PostCanvas extends FeedCanvas {
 
 
     void reply() {
-        reply((JSONObject) elements.elementAt(selectedIndex), selectedIndex);
+        reply((JSONObject) elements.elementAt(selectedIndex));
+    }
+
+
+    void loadReplies(final JSONObject loadMore) {
+        final String[] urlParts = {ITD.API_URL + "/comments/", "/replies?limit=", "&page="};
+
+        Runnable repliesRunnable = new Runnable() {
+            public void run() {
+                Object requestHolder = new Object();
+                repliesRequests.addElement(requestHolder);
+                ITD.log(repliesRequests);
+                loadMore.put("hidden", true);
+                repaint();
+
+                int page = loadMore.getInt("page");
+                int loaded = loadMore.getInt("loaded");
+                String parent = loadMore.getString("parent");
+
+                String url = urlParts[0] + parent + urlParts[1] + ITD.REPLIES_LIMIT;
+
+                if (page == 1) {
+                    loaded = 0;
+                    for (int index = 1; index < elements.size(); index++) {
+                        JSONObject element = (JSONObject) elements.elementAt(index);
+                        if (element.has("replyTo") && element.getString("parent", "").equals(parent)
+                                /* && !element.getBoolean("new", false) */) {
+                            elements.removeElementAt(index);
+                        }
+                    }
+                }
+                else url += urlParts[2] + page;
+
+                String response = ITD.getRequest(url, midlet.getRefreshToken());
+                JSONObject jsonData = JSON.getObject(response).getObject("data");
+
+                JSONArray replies = jsonData.getArray("replies");
+                for (int replyIndex = 0; replyIndex < replies.size(); replyIndex++) {
+                    JSONObject reply = replies.getObject(replyIndex);
+                    reply.put("parent", parent);
+                    elements.insertElementAt(reply, elements.indexOf(loadMore));
+                }
+
+                if (jsonData.getObject("pagination").getBoolean("hasMore")) {
+                    loadMore.put("page", ++page);
+                    loadMore.put("loaded", loaded += ITD.REPLIES_LIMIT);
+                    loadMore.put("rest", jsonData.getObject("pagination").getInt("total") - loaded);
+
+                    loadMore.put("hidden", false);
+                }
+                else {
+                    elements.removeElement(loadMore);
+                }
+
+                repliesRequests.removeElement(requestHolder);
+                repaint();
+            }
+        };
+        Thread repliesLoader = new Thread(repliesRunnable, "repliesLoader");
+        repliesLoader.start();
+    }
+
+
+    void loadReplies() {
+        loadReplies((JSONObject) elements.elementAt(selectedIndex));
     }
 
 
@@ -622,9 +842,13 @@ public class PostCanvas extends FeedCanvas {
             int[] c /*coords*/ = (int[]) replyHbEnumKeys.nextElement();
             if (c[0] <= x && x <= c[2] && c[1] <= y && y <= c[3]) {
                 ITD.log("Открытие окна ответа");
-                JSONObject comment = (JSONObject) repliesHitboxes.get(c);
-                int index = elements.indexOf(comment);
-                reply(comment, index);
+                JSONObject element = (JSONObject) repliesHitboxes.get(c);
+                if (element.getString("id").equals(REPLIES_LOADER_ID)) {
+                    loadReplies(element);
+                }
+                else {
+                    reply(element);
+                }
                 return true;
             }
         }
@@ -652,17 +876,7 @@ public class PostCanvas extends FeedCanvas {
         removeCommand(midlet.commentCmd);
         removeCommand(midlet.repostCmd);
         removeCommand(midlet.replyCmd);
-    }
-
-
-    protected void keyPressed(int keyCode) {
-        super.keyPressed(keyCode);
-        if (selectedIndex > 0) {
-            addCommand(midlet.replyCmd);
-        }
-        else {
-            removeCommand(midlet.replyCmd);
-        }
+        removeCommand(midlet.loadCmd);
     }
 
 

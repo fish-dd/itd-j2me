@@ -25,7 +25,8 @@ public class ITD extends MIDlet {
 
     static int POSTS_LIMIT = 5;
     static int COMMENTS_LIMIT = 15;
-    static int J2ME_LOADER_FIX_SLEEP = 100;
+    static int REPLIES_LIMIT = 10;
+    static int J2ME_LOADER_FIX_SLEEP = 50;
 
     private Form startForm;
 
@@ -63,6 +64,7 @@ public class ITD extends MIDlet {
     public Command replyCmd;
     public Command commentCmd;
     public Command repostCmd;
+    public Command loadCmd;
 
     public CommandListener writerCmdListener;
     public Command postCmd;
@@ -147,6 +149,7 @@ public class ITD extends MIDlet {
         keyEnterCommand = new Command("Ввод", Command.OK, 1);
         keyRetryCommand = new Command("Повторить", Command.OK, 2);
         postCmd = new Command("Опубликовать", Command.OK, 1);
+        loadCmd = new Command("Загрузить", Command.OK, 1);
 
         feedCmdListener = new CommandListener() {
             public void commandAction(Command command, Displayable displayable) {
@@ -167,15 +170,18 @@ public class ITD extends MIDlet {
                     feed.repostPost();
                 }
                 else if (command == selectCmd) {
-//                    display.setCurrent(new Alert(":(", "Ещё не реализовано", null, null));
                     FeedCanvas feed = ((FeedCanvas) displayable);
                     feed.openPost();
+                }
+                else if (command == loadCmd) {
+                    PostCanvas postCanvas = ((PostCanvas) displayable);
+                    postCanvas.loadReplies();
                 }
                 else if (command == backToMenuCmd) {
                     ((FeedCanvas) displayable).stopFeed();
                     if (displayable instanceof PostCanvas) {
                         PostCanvas pc = (PostCanvas) displayable;
-                        display.setCurrent(pc.targetScreen);
+                        display.setCurrent(pc.parentScreen);
                     }
                     else {
                         display.setCurrent(menuList);
@@ -363,6 +369,9 @@ public class ITD extends MIDlet {
                         try {
                             String response = postRequest(url, content.getBytes("UTF-8"), refreshToken);
                             JSONObject json = JSON.getObject(response);
+
+                            json.put("new", true);
+                            json.put("parent", commentId);
 
                             JSONObject replyTo = new JSONObject();
                             replyTo.put("displayName", name);
@@ -683,7 +692,8 @@ public class ITD extends MIDlet {
     }
 
 
-    void initWriter(int type, String recipientId, String elementId, String name, Displayable targetScreen, int replyIndex) {
+    void initWriter(int type, String recipientId, String elementId, String name,
+                    Displayable targetScreen, int replyIndex) {
         if (targetScreen == null) {
             targetScreen = menuList;
         }
@@ -741,6 +751,11 @@ public class ITD extends MIDlet {
 
     public static int toInt(Object num) {
         return ((Integer) num).intValue();
+    }
+
+
+    public static Boolean bool(boolean b) {
+        return b ? Boolean.TRUE : Boolean.FALSE;
     }
 
 
