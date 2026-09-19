@@ -276,7 +276,7 @@ public class ProfileCanvas extends FeedCanvas {
             //юзернейм
             String username = profile.getString("username");
             g.drawString(
-                    "@"+username,
+                    "@" + username,
                     PADDING * 2 + avatarSize,
                     userDataY + lineHeight + PADDING - 2,
                     Graphics.TOP | Graphics.LEFT

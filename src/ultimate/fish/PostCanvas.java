@@ -50,7 +50,7 @@ public class PostCanvas extends FeedCanvas {
         this.postId = post.getString("id");
         this.parentScreen = parentScreen;
 
-        setFullScreenMode(false);
+        setFullScreenMode(true);
         setTitle(TITLE);
         initFonts();
         setScreenSize();
@@ -82,12 +82,6 @@ public class PostCanvas extends FeedCanvas {
 
         commentMediaWidth = screenWidth - PADDING*2;
         replyMediaWidth = commentMediaWidth - replyPadding;
-    }
-
-
-    void putMedia(String id, Image image, Integer height) { //TODO оптимизировать кеширование картинок
-        medias.put(id, image);
-        elementsHeights.put(id, height);
     }
 
 
